@@ -336,3 +336,72 @@ export async function generateInsightsApi(data: {
   });
   return res.json();
 }
+
+export async function generateSpiritualCounselingApi(data: {
+  topic: string;
+  question?: string;
+  category?: string;
+  userContext?: string;
+}) {
+  const res = await fetch(`${API_BASE}/ai/spiritual-counseling`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function generateDailyDevotionalApi(data: {
+  timing: string;
+  theme: string;
+  scripture?: string;
+  audience?: string;
+}) {
+  const res = await fetch(`${API_BASE}/ai/daily-devotional`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function generateLiturgyOrderApi(data: {
+  serviceType: string;
+  theme: string;
+  scripture: string;
+  rayon?: string;
+}) {
+  const res = await fetch(`${API_BASE}/ai/liturgy-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function generateSundaySchoolApi(data: {
+  ageGroup: string;
+  storyTheme: string;
+  scripture: string;
+}) {
+  const res = await fetch(`${API_BASE}/ai/sunday-school`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function generateBibleStudyApi(data: {
+  scripture: string;
+  topic: string;
+  audience?: string;
+}) {
+  const res = await fetch(`${API_BASE}/ai/bible-study`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+

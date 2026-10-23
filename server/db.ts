@@ -284,7 +284,6 @@ function initSchema(db: DatabaseSync) {
   `);
 
   seedInitialData(db);
-  seedCongregationData(db);
 }
 
 function seedInitialData(db: DatabaseSync) {

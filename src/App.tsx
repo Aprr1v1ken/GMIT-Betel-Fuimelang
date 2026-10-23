@@ -15,6 +15,7 @@ import { SacramentModal } from './components/SacramentModal.tsx';
 import { ImportModal } from './components/ImportModal.tsx';
 import { PrintReportModal } from './components/PrintReportModal.tsx';
 import { KoboExportModal } from './components/KoboExportModal.tsx';
+import { WartaPdfModal } from './components/WartaPdfModal.tsx';
 
 // Views
 import { DashboardView } from './components/views/DashboardView.tsx';
@@ -102,6 +103,7 @@ export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPrintReportModal, setShowPrintReportModal] = useState(false);
   const [showKoboExportModal, setShowKoboExportModal] = useState(false);
+  const [showWartaPdfModal, setShowWartaPdfModal] = useState(false);
   const [reportType, setReportType] = useState<'members' | 'rayons' | 'finance' | 'sacraments' | 'attendance'>('members');
 
   // Server Data States - initialize members with locally cached data for instant display
@@ -236,8 +238,8 @@ export default function App() {
         isOfflinePending: true,
       }));
 
-      // If server returned members, prioritize server data + remaining offline items
-      if (serverMembers.length > 0 || remainingOffline.length > 0) {
+      // If server responded, synchronize state and cache accurately
+      if (results[1].status === 'fulfilled') {
         const combinedMembers = [
           ...offlineItems,
           ...serverMembers.filter((sm) => !offlineItems.some((om) => om.id === sm.id)),
@@ -245,7 +247,7 @@ export default function App() {
         setMembers(combinedMembers);
         cacheMembersLocally(combinedMembers);
       } else {
-        // Fall back to local cached members if server returned empty (offline)
+        // Fall back to local cached members only if server was unreachable
         const cached = getCachedMembersLocally();
         if (cached.length > 0) {
           setMembers(cached);
@@ -712,6 +714,7 @@ export default function App() {
                 setDetailMember(m);
                 setShowMemberDetailModal(true);
               }}
+              onOpenComposeWarta={() => setShowWartaPdfModal(true)}
             />
           )}
 
@@ -1010,6 +1013,13 @@ export default function App() {
         onClose={() => setShowKoboExportModal(false)}
         members={members}
         rayons={rayons}
+      />
+
+      <WartaPdfModal
+        isOpen={showWartaPdfModal}
+        onClose={() => setShowWartaPdfModal(false)}
+        transactions={transactions}
+        members={members}
       />
 
       {/* Floating Offline & Sync Notification Toast */}

@@ -22,6 +22,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Suppress Vite WebSocket/HMR disconnect errors in AI Studio iframe environment -->
+    <script>
+      window.addEventListener('error', function(event) {
+        if (event.message && (event.message.includes("reading 'send'") || event.message.includes('WebSocket') || event.message.includes('vite'))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return true;
+        }
+      });
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason && (String(event.reason).includes("reading 'send'") || String(event.reason).includes('WebSocket'))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
