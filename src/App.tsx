@@ -14,6 +14,7 @@ import { FamilyModal } from './components/FamilyModal.tsx';
 import { SacramentModal } from './components/SacramentModal.tsx';
 import { ImportModal } from './components/ImportModal.tsx';
 import { PrintReportModal } from './components/PrintReportModal.tsx';
+import { KoboExportModal } from './components/KoboExportModal.tsx';
 
 // Views
 import { DashboardView } from './components/views/DashboardView.tsx';
@@ -100,10 +101,11 @@ export default function App() {
   const [sacramentType, setSacramentType] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPrintReportModal, setShowPrintReportModal] = useState(false);
+  const [showKoboExportModal, setShowKoboExportModal] = useState(false);
   const [reportType, setReportType] = useState<'members' | 'rayons' | 'finance' | 'sacraments' | 'attendance'>('members');
 
-  // Server Data States
-  const [members, setMembers] = useState<Member[]>([]);
+  // Server Data States - initialize members with locally cached data for instant display
+  const [members, setMembers] = useState<Member[]>(() => getCachedMembersLocally());
   const [families, setFamilies] = useState<Family[]>([]);
   const [rayons, setRayons] = useState<Rayon[]>([]);
   const [categorials, setCategorials] = useState<CategorialGroup[]>([]);
@@ -135,27 +137,20 @@ export default function App() {
     type: 'success' | 'info' | 'error';
   } | null>(null);
 
-  // Load all data from API with Offline Cache Fallback
+  // Load all data from API with Auto-Sync & Promise.allSettled Resilience
   const loadAllData = async () => {
+    // 1. Auto-sync any pending offline queue items if server is reachable
+    const pendingQueue = getOfflineMembersQueue();
+    if (pendingQueue.length > 0) {
+      try {
+        await syncOfflineQueueToServer(api.createMemberApi);
+      } catch (syncErr) {
+        console.warn('Auto-sync offline queue failed on loadAllData:', syncErr);
+      }
+    }
+
     try {
-      const [
-        statsRes,
-        membersRes,
-        familiesRes,
-        rayonsRes,
-        catRes,
-        staffRes,
-        sacramentsRes,
-        mutationsRes,
-        eventsRes,
-        schedulesRes,
-        attendanceRes,
-        financeRes,
-        docsRes,
-        announcementsRes,
-        correctionsRes,
-        auditRes,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         api.fetchStatsApi(),
         api.fetchMembersApi(),
         api.fetchFamiliesApi(),
@@ -174,12 +169,31 @@ export default function App() {
         api.fetchAuditLogsApi(),
       ]);
 
+      const val = (idx: number) => results[idx].status === 'fulfilled' ? (results[idx] as PromiseFulfilledResult<any>).value : null;
+
+      const statsRes = val(0);
+      const membersRes = val(1);
+      const familiesRes = val(2);
+      const rayonsRes = val(3);
+      const catRes = val(4);
+      const staffRes = val(5);
+      const sacramentsRes = val(6);
+      const mutationsRes = val(7);
+      const eventsRes = val(8);
+      const schedulesRes = val(9);
+      const attendanceRes = val(10);
+      const financeRes = val(11);
+      const docsRes = val(12);
+      const announcementsRes = val(13);
+      const correctionsRes = val(14);
+      const auditRes = val(15);
+
       if (statsRes?.stats) setStats(statsRes.stats);
 
-      // Handle Members: Combine server members with pending offline members
+      // Handle Members: Combine server members with remaining pending offline items
       const serverMembers: Member[] = membersRes?.members || [];
-      const offlineQueue = getOfflineMembersQueue();
-      const offlineItems: Member[] = offlineQueue.map((item) => ({
+      const remainingOffline = getOfflineMembersQueue();
+      const offlineItems: Member[] = remainingOffline.map((item) => ({
         id: item.id || `offline-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         memberNo: item.memberNo || 'OFFLINE-TEMP',
         fullName: item.fullName || 'Jemaat Baru (Offline)',
@@ -222,14 +236,22 @@ export default function App() {
         isOfflinePending: true,
       }));
 
-      // Combine: offline items on top, followed by server items
-      const combinedMembers = [
-        ...offlineItems,
-        ...serverMembers.filter((sm) => !offlineItems.some((om) => om.id === sm.id)),
-      ];
-      setMembers(combinedMembers);
-      cacheMembersLocally(combinedMembers);
-      setPendingOfflineCount(offlineQueue.length);
+      // If server returned members, prioritize server data + remaining offline items
+      if (serverMembers.length > 0 || remainingOffline.length > 0) {
+        const combinedMembers = [
+          ...offlineItems,
+          ...serverMembers.filter((sm) => !offlineItems.some((om) => om.id === sm.id)),
+        ];
+        setMembers(combinedMembers);
+        cacheMembersLocally(combinedMembers);
+      } else {
+        // Fall back to local cached members if server returned empty (offline)
+        const cached = getCachedMembersLocally();
+        if (cached.length > 0) {
+          setMembers(cached);
+        }
+      }
+      setPendingOfflineCount(remainingOffline.length);
 
       if (familiesRes?.families) setFamilies(familiesRes.families);
       if (rayonsRes?.rayons) setRayons(rayonsRes.rayons);
@@ -405,36 +427,33 @@ export default function App() {
     }
   };
 
-  // Member CRUD handlers with Offline-First support
+  // Member CRUD handlers with Automatic Direct-Save & Persistence
   const handleSaveMember = async (data: Partial<Member>) => {
-    // If currently offline and registering a new member: save directly to offline queue
-    if (!navigator.onLine && !editingMember) {
-      const optimistic = addMemberToOfflineQueue(data);
-      setMembers((prev) => [optimistic, ...prev]);
-      setPendingOfflineCount(getOfflineMembersQueue().length);
-      setSyncToast({
-        message: `Offline: Data jemaat "${data.fullName || 'Baru'}" berhasil disimpan di perangkat lokal. Akan otomatis disinkronkan ke server setelah terhubung internet.`,
-        type: 'info',
-      });
-      setShowMemberFormModal(false);
-      setEditingMember(null);
-      return;
-    }
-
     try {
       if (editingMember) {
-        await api.updateMemberApi(editingMember.id, data);
+        const res = await api.updateMemberApi(editingMember.id, data);
+        if (res && res.success === false) {
+          throw new Error(res.message || 'Gagal memperbarui jemaat di server');
+        }
         setSyncToast({
-          message: `Data jemaat "${data.fullName}" berhasil diperbarui di server.`,
+          message: `Data jemaat "${data.fullName}" berhasil diperbarui di database.`,
           type: 'success',
         });
       } else {
         const res = await api.createMemberApi(data);
         if (res && res.success) {
           setSyncToast({
-            message: `Jemaat "${data.fullName}" berhasil didaftarkan ke database server.`,
+            message: `Jemaat "${data.fullName}" (${res.memberNo || 'Baru'}) berhasil disimpan ke database.`,
             type: 'success',
           });
+          // Immediately update state and persistent local cache
+          if (res.member) {
+            setMembers((prev) => {
+              const updated = [res.member, ...prev.filter((m) => m.id !== res.member.id)];
+              cacheMembersLocally(updated);
+              return updated;
+            });
+          }
         } else {
           throw new Error(res?.message || 'Gagal menyimpan ke server');
         }
@@ -443,13 +462,17 @@ export default function App() {
       setShowMemberFormModal(false);
       setEditingMember(null);
     } catch (err: any) {
-      console.warn('Gagal menghubungi server, menyimpan ke antrean offline:', err);
+      console.warn('Gagal menyimpan langsung ke server, mencadangkan ke antrean offline:', err);
       if (!editingMember) {
         const optimistic = addMemberToOfflineQueue(data);
-        setMembers((prev) => [optimistic, ...prev]);
+        setMembers((prev) => {
+          const updated = [optimistic, ...prev.filter((m) => m.id !== optimistic.id)];
+          cacheMembersLocally(updated);
+          return updated;
+        });
         setPendingOfflineCount(getOfflineMembersQueue().length);
         setSyncToast({
-          message: `Koneksi tidak stabil: Data jemaat "${data.fullName || 'Baru'}" aman tersimpan di antrean offline lokal dan akan disinkronkan saat online.`,
+          message: `Data jemaat "${data.fullName || 'Baru'}" aman tersimpan di penyimpanan lokal dan akan disinkronkan saat terhubung ke server.`,
           type: 'info',
         });
         setShowMemberFormModal(false);
@@ -720,6 +743,7 @@ export default function App() {
               }}
               onDeleteMember={handleDeleteMember}
               onOpenImportModal={() => setShowImportModal(true)}
+              onOpenKoboExport={() => setShowKoboExportModal(true)}
               onOpenPrintReport={() => {
                 setReportType('members');
                 setShowPrintReportModal(true);
@@ -979,6 +1003,13 @@ export default function App() {
         families={families}
         rayons={rayons}
         transactions={transactions}
+      />
+
+      <KoboExportModal
+        isOpen={showKoboExportModal}
+        onClose={() => setShowKoboExportModal(false)}
+        members={members}
+        rayons={rayons}
       />
 
       {/* Floating Offline & Sync Notification Toast */}

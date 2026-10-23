@@ -61,13 +61,39 @@ apiRouter.post('/auth/login', (req, res) => {
   });
 });
 
+function getSafeNextMemberNo(db: any): string {
+  const prefix = 'GMIT-BF-2026-';
+  const existing = db.prepare("SELECT member_no FROM members WHERE member_no LIKE ?").all(`${prefix}%`) as { member_no: string }[];
+  let maxSeq = 0;
+  for (const row of existing) {
+    const numPart = parseInt(row.member_no.replace(prefix, ''), 10);
+    if (!isNaN(numPart) && numPart > maxSeq) {
+      maxSeq = numPart;
+    }
+  }
+  return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`;
+}
+
+function getSafeNextFamilyNo(db: any): string {
+  const prefix = 'KK-BF-';
+  const existing = db.prepare("SELECT family_no FROM families WHERE family_no LIKE ?").all(`${prefix}%`) as { family_no: string }[];
+  let maxSeq = 0;
+  for (const row of existing) {
+    const numPart = parseInt(row.family_no.replace(prefix, ''), 10);
+    if (!isNaN(numPart) && numPart > maxSeq) {
+      maxSeq = numPart;
+    }
+  }
+  return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`;
+}
+
 // 2. Members CRUD
 apiRouter.get('/members', (req, res) => {
   const db = getDb();
   const { query, rayonId, categorialId, status } = req.query;
 
   let sql = `
-    SELECT m.*, r.name as rayon_name, c.name as categorial_group_name, f.family_no
+    SELECT m.*, r.name as rayon_name, c.name as categorial_group_name, f.family_no, f.head_of_family_name
     FROM members m
     LEFT JOIN rayons r ON m.rayon_id = r.id
     LEFT JOIN categorial_groups c ON m.categorial_group_id = c.id
@@ -155,10 +181,8 @@ apiRouter.post('/members', (req, res) => {
     return res.status(400).json({ success: false, message: 'Nomor Induk Kependudukan (NIK) tidak boleh kurang atau lebih dari 16 angka' });
   }
 
-  // Count to generate new member_no if not provided
-  const countRow = db.prepare('SELECT count(*) as count FROM members').get() as { count: number };
-  const memberNo = data.memberNo || generateMemberNo((countRow?.count || 0) + 1);
-  const id = 'm-' + Date.now();
+  const memberNo = data.memberNo || getSafeNextMemberNo(db);
+  const id = 'm-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
   const now = new Date().toISOString().substring(0, 10);
 
   try {
@@ -192,7 +216,49 @@ apiRouter.post('/members', (req, res) => {
 
     addAuditLog('admin', 'Admin', 'Tambah Jemaat', 'Database Jemaat', `Menambahkan anggota jemaat baru: ${data.fullName} (${memberNo})`);
 
-    res.json({ success: true, message: 'Data jemaat berhasil disimpan', id, memberNo });
+    const createdMember: Member = {
+      id,
+      memberNo,
+      fullName: data.fullName,
+      nickname: data.nickname || '',
+      nik: data.nik || '',
+      familyCardNo: data.familyCardNo || '',
+      familyId: data.familyId || '',
+      familyName: '',
+      familyRole: data.familyRole || 'Anggota',
+      gender: data.gender,
+      birthPlace: data.birthPlace || '',
+      birthDate: data.birthDate,
+      address: data.address || '',
+      kelurahan: data.kelurahan || 'Lembur Tengah',
+      kecamatan: data.kecamatan || 'Alor Tengah Utara',
+      kabupaten: data.kabupaten || 'Alor',
+      phone: data.phone || '',
+      email: data.email || '',
+      maritalStatus: data.maritalStatus || 'Belum Menikah',
+      spouseName: data.spouseName || '',
+      rayonId: data.rayonId,
+      rayonName: '',
+      categorialGroupId: data.categorialGroupId || 'c1',
+      categorialGroupName: '',
+      membershipStatus: data.membershipStatus || 'Tetap',
+      baptismStatus: data.baptismStatus || 'Belum',
+      baptismDate: data.baptismDate || '',
+      confirmationStatus: data.confirmationStatus || 'Belum',
+      confirmationDate: data.confirmationDate || '',
+      marriageChurchStatus: data.marriageChurchStatus || 'Belum',
+      marriageDate: data.marriageDate || '',
+      education: data.education || '',
+      occupation: data.occupation || '',
+      joinDate: data.joinDate || now,
+      status: data.status || 'Aktif',
+      notes: data.notes || '',
+      photoUrl: data.photoUrl || '',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    res.json({ success: true, message: 'Data jemaat berhasil disimpan', id, memberNo, member: createdMember });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Gagal menyimpan data: ' + err.message });
   }
@@ -287,9 +353,8 @@ apiRouter.post('/families', (req, res) => {
     return res.status(400).json({ success: false, message: 'Nama Kepala Keluarga dan Rayon wajib diisi' });
   }
 
-  const countRow = db.prepare('SELECT count(*) as count FROM families').get() as { count: number };
-  const familyNo = data.familyNo || generateFamilyNo((countRow?.count || 0) + 1);
-  const id = 'f-' + Date.now();
+  const familyNo = data.familyNo || getSafeNextFamilyNo(db);
+  const id = 'f-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
   const now = new Date().toISOString().substring(0, 10);
 
   try {

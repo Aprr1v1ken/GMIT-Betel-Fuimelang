@@ -16,6 +16,7 @@ import {
   IdCard,
   WifiOff,
   RefreshCw,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { calculateAge, formatDateDMY } from '../../utils/church-logic.ts';
 import type { Member, Rayon, CategorialGroup } from '../../types/index.ts';
@@ -30,6 +31,7 @@ interface MembersViewProps {
   onDeleteMember: (id: string) => void;
   onOpenImportModal: () => void;
   onOpenPrintReport: () => void;
+  onOpenKoboExport?: () => void;
   isOnline?: boolean;
   onSyncOffline?: () => void;
   syncingOffline?: boolean;
@@ -45,6 +47,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
   onDeleteMember,
   onOpenImportModal,
   onOpenPrintReport,
+  onOpenKoboExport,
   isOnline = true,
   onSyncOffline,
   syncingOffline = false,
@@ -185,11 +188,22 @@ export const MembersView: React.FC<MembersViewProps> = ({
           <button
             onClick={exportToCSV}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
-            title="Unduh format CSV"
+            title="Unduh format CSV standar"
           >
             <Download className="w-3.5 h-3.5 text-emerald-400" />
             <span>Ekspor CSV</span>
           </button>
+
+          {onOpenKoboExport && (
+            <button
+              onClick={onOpenKoboExport}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md shadow-teal-950/40 cursor-pointer border border-teal-400/40"
+              title="Ekspor ke KoboToolbox (CSV, JSON, XLSForm)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-teal-200" />
+              <span>Ekspor KoboToolbox</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenPrintReport}
