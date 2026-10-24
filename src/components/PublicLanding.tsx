@@ -25,6 +25,11 @@ import {
   Download,
   Share2,
   PlusSquare,
+  Sun,
+  MessageSquare,
+  Music,
+  Baby,
+  HelpCircle,
 } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall.ts';
 import type { Announcement, ChurchEvent, ServiceSchedule, Member, Family, Rayon, CategorialGroup, User } from '../types/index.ts';
@@ -147,6 +152,10 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
           </a>
           <a href="#warta" className="hover:text-amber-400 transition-colors">
             Warta & Pengumuman
+          </a>
+          <a href="#ai-rohani" className="hover:text-emerald-300 transition-colors flex items-center gap-1.5 text-emerald-300 font-bold">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>AI Rohani (Gratis)</span>
           </a>
         </nav>
 
@@ -566,8 +575,8 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                     {sch.serviceName}
                   </h4>
                   <div className="text-xs text-slate-300 space-y-1 pt-1">
-                    <p><span className="text-slate-400">Pelayan:</span> {sch.preacher}</p>
-                    <p><span className="text-slate-400">Liturgos:</span> {sch.liturgist}</p>
+                    <p><span className="text-slate-400">Pelayan:</span> {sch.preacher || <span className="text-slate-500 italic">Belum diisi</span>}</p>
+                    <p><span className="text-slate-400">Liturgos:</span> {sch.liturgist || <span className="text-slate-500 italic">Belum diisi</span>}</p>
                   </div>
                 </div>
               ))}
@@ -701,6 +710,113 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 </div>
               ))
             )}
+          </div>
+        </section>
+
+        {/* PUBLIC CHRISTIAN SPIRITUAL AI SECTION */}
+        <section id="ai-rohani" className="space-y-6 scroll-mt-20">
+          <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-amber-500/20 pb-4 gap-3">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>100% Gratis untuk Seluruh Warga Jemaat & Majelis</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-2.5">
+                <span>Layanan AI Rohani Kristen GMIT</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                Asisten kecerdasan buatan rohani berakar pada Alkitab (TB LAI) dan tradisi Reformasi GMIT untuk mendampingi persekutuan keluarga, renungan harian, dan pelayanan gerejawi.
+              </p>
+            </div>
+            <button
+              onClick={currentUser ? onEnterApp : onOpenLogin}
+              className="text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 px-4 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer self-start md:self-auto"
+            >
+              <span>{currentUser ? 'Buka Ruang AI Rohani' : 'Masuk untuk Akses Lengkap'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Santapan Rohani WA */}
+            <div className="p-5 rounded-2xl bg-[#0c1329] border border-emerald-500/20 hover:border-emerald-400/50 transition-colors space-y-3 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+                  <Sun className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-white text-sm">Santapan Rohani Harian</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Renungan pagi dan malam yang menenangkan jiwa, dilengkapi ayat emas dan teks yang siap dibagikan ke grup WhatsApp Rayon.
+                </p>
+              </div>
+              <button
+                onClick={currentUser ? onEnterApp : onOpenLogin}
+                className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+              >
+                <span>Akses Renungan Harian</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Card 2: Konseling Rohani */}
+            <div className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 hover:border-amber-400/50 transition-colors space-y-3 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-white text-sm">Konseling & Bimbingan Iman</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Tuntunan Alkitabiah atas kekhawatiran hidup, masalah keluarga, kedukaan, dan naskah doa penyerahan hati yang menguatkan.
+                </p>
+              </div>
+              <button
+                onClick={currentUser ? onEnterApp : onOpenLogin}
+                className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+              >
+                <span>Mulai Konseling Rohani</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Card 3: Sekolah Minggu PAR */}
+            <div className="p-5 rounded-2xl bg-[#0c1329] border border-pink-500/20 hover:border-pink-400/50 transition-colors space-y-3 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-pink-500/20 text-pink-300 flex items-center justify-center">
+                  <Baby className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-white text-sm">Sahabat Guru PAR GMIT</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Naskah cerita interaktif anak Sekolah Minggu, peraga alam (daun, jagung, batu), kuis seru, dan ayat hafalan mingguan.
+                </p>
+              </div>
+              <button
+                onClick={currentUser ? onEnterApp : onOpenLogin}
+                className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-pink-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+              >
+                <span>Buka Bahan PAR</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Card 4: Penuntun Liturgi Khusus */}
+            <div className="p-5 rounded-2xl bg-[#0c1329] border border-sky-500/20 hover:border-sky-400/50 transition-colors space-y-3 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center">
+                  <Music className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-white text-sm">Tata Ibadah Liturgi Khusus</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Penyusunan tata kebaktian rumah tangga rayon, syukur panen Alor, dan penghiburan duka lengkap rujukan nomor kidung KJ/PKJ.
+                </p>
+              </div>
+              <button
+                onClick={currentUser ? onEnterApp : onOpenLogin}
+                className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+              >
+                <span>Lihat Tata Ibadah</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </section>
       </main>

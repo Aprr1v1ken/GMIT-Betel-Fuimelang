@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'dashboard', label: 'Dashboard Statistik', icon: LayoutDashboard },
         { id: 'members', label: 'Database Jemaat', icon: Users },
         { id: 'families', label: 'Kartu Keluarga (KK)', icon: Home },
-        { id: 'ai-assistant', label: 'Asisten AI Pastoral', icon: Sparkles },
+        { id: 'ai-assistant', label: 'AI Rohani & Pastoral', icon: Sparkles, badge: 'Gratis' },
       ],
     },
     {
@@ -157,7 +157,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-400'}`} />
                         <span className="truncate">{item.label}</span>
                       </div>
-                      {isActive && <ChevronRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(item as any).badge && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            {(item as any).badge}
+                          </span>
+                        )}
+                        {isActive && <ChevronRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                      </div>
                     </button>
                   );
                 })}

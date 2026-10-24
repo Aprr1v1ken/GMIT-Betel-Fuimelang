@@ -134,6 +134,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [activeThemeId, setActiveThemeId] = useState<CardColorThemeId>('gold');
+  const [printMode, setPrintMode] = useState<'card-only' | 'full'>('card-only');
 
   if (!isOpen || !member) return null;
 
@@ -159,15 +160,25 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
 
   const currentTheme = getResolvedTheme();
 
-  const handlePrintCard = () => {
-    window.print();
+  const handlePrintCardOnly = () => {
+    setPrintMode('card-only');
+    setTimeout(() => {
+      window.print();
+    }, 50);
+  };
+
+  const handlePrintFull = () => {
+    setPrintMode('full');
+    setTimeout(() => {
+      window.print();
+    }, 50);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-amber-500/20 bg-[#070b18]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm print:p-0 print:bg-white print:static print:block">
+      <div className="w-full max-w-2xl bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:border-none print:bg-transparent print:rounded-none">
+        {/* Header - Hidden on print */}
+        <div className="flex items-center justify-between p-5 border-b border-amber-500/20 bg-[#070b18] print:hidden">
           <div className="flex items-center gap-2.5">
             <IdCard className="w-5 h-5 text-amber-400" />
             <div>
@@ -182,15 +193,24 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handlePrintCard}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-lg shadow-amber-500/20"
+              onClick={handlePrintCardOnly}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-lg shadow-amber-500/20 cursor-pointer"
+              title="Cetak khusus kartu ID saja (ukuran kartu)"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Cetak Kartu ({currentTheme.name})</span>
+              <span>Cetak Kartu</span>
+            </button>
+            <button
+              onClick={handlePrintFull}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+              title="Cetak kartu beserta seluruh lembar biodata lengkap"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>Cetak Biodata</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -198,9 +218,9 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Color Variation Palette Selector */}
-          <div className="p-3 bg-[#070b18] border border-amber-500/20 rounded-xl space-y-2">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:space-y-4">
+          {/* Color Variation Palette Selector - Hidden on print */}
+          <div className="p-3 bg-[#070b18] border border-amber-500/20 rounded-xl space-y-2 print:hidden">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
                 <Palette className="w-4 h-4 text-amber-400" />
@@ -397,73 +417,73 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
           </div>
 
           {/* Full Detailed Breakdown */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-              <h4 className="font-bold text-amber-300 border-b border-slate-800 pb-1">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs ${printMode === 'card-only' ? 'print:hidden' : 'print:grid print:mt-6 print:border-t-2 print:border-black print:pt-4 print:text-black'}`}>
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 print:bg-white print:border-slate-400 print:text-black">
+              <h4 className="font-bold text-amber-300 border-b border-slate-800 pb-1 print:text-black print:border-slate-300">
                 Data Kependudukan & Kontak
               </h4>
-              <div className="space-y-1.5 text-slate-300">
+              <div className="space-y-1.5 text-slate-300 print:text-black">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">NIK:</span>
-                  <span className="font-mono font-semibold text-amber-300">{member.nik || '-'}</span>
+                  <span className="text-slate-400 print:text-slate-600">NIK:</span>
+                  <span className="font-mono font-semibold text-amber-300 print:text-black">{member.nik || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">No Kartu Keluarga:</span>
+                  <span className="text-slate-400 print:text-slate-600">No Kartu Keluarga:</span>
                   <span className="font-mono">{member.familyCardNo || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Status Nikah:</span>
+                  <span className="text-slate-400 print:text-slate-600">Status Nikah:</span>
                   <span>{member.maritalStatus}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Nama Pasangan:</span>
+                  <span className="text-slate-400 print:text-slate-600">Nama Pasangan:</span>
                   <span>{member.spouseName || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Pendidikan:</span>
+                  <span className="text-slate-400 print:text-slate-600">Pendidikan:</span>
                   <span>{member.education || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Pekerjaan:</span>
+                  <span className="text-slate-400 print:text-slate-600">Pekerjaan:</span>
                   <span>{member.occupation || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">No. Telepon / WA:</span>
+                  <span className="text-slate-400 print:text-slate-600">No. Telepon / WA:</span>
                   <span className="font-mono">{member.phone || '-'}</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-              <h4 className="font-bold text-amber-300 border-b border-slate-800 pb-1">
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 print:bg-white print:border-slate-400 print:text-black">
+              <h4 className="font-bold text-amber-300 border-b border-slate-800 pb-1 print:text-black print:border-slate-300">
                 Riwayat Sakramen & Catatan
               </h4>
-              <div className="space-y-1.5 text-slate-300">
+              <div className="space-y-1.5 text-slate-300 print:text-black">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Status Baptis:</span>
-                  <span className="font-semibold text-cyan-300">
+                  <span className="text-slate-400 print:text-slate-600">Status Baptis:</span>
+                  <span className="font-semibold text-cyan-300 print:text-black">
                     {member.baptismStatus} {member.baptismDate ? `(${formatDateDMY(member.baptismDate)})` : ''}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Status Sidi:</span>
-                  <span className="font-semibold text-amber-300">
+                  <span className="text-slate-400 print:text-slate-600">Status Sidi:</span>
+                  <span className="font-semibold text-amber-300 print:text-black">
                     {member.confirmationStatus} {member.confirmationDate ? `(${formatDateDMY(member.confirmationDate)})` : ''}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Pernikahan Gereja:</span>
-                  <span className="font-semibold text-emerald-300">
+                  <span className="text-slate-400 print:text-slate-600">Pernikahan Gereja:</span>
+                  <span className="font-semibold text-emerald-300 print:text-black">
                     {member.marriageChurchStatus} {member.marriageDate ? `(${formatDateDMY(member.marriageDate)})` : ''}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Status Keanggotaan:</span>
+                  <span className="text-slate-400 print:text-slate-600">Status Keanggotaan:</span>
                   <span>{member.membershipStatus} ({member.status})</span>
                 </div>
-                <div className="pt-2 border-t border-slate-800/80">
-                  <span className="text-slate-400 block text-[11px] mb-1">Catatan Khusus:</span>
-                  <p className="text-xs text-slate-300 italic bg-slate-950 p-2 rounded border border-slate-800">
+                <div className="pt-2 border-t border-slate-800/80 print:border-slate-300">
+                  <span className="text-slate-400 block text-[11px] mb-1 print:text-slate-600">Catatan Khusus:</span>
+                  <p className="text-xs text-slate-300 italic bg-slate-950 p-2 rounded border border-slate-800 print:bg-slate-50 print:text-black print:border-slate-300">
                     {member.notes || 'Tidak ada catatan administrasi khusus.'}
                   </p>
                 </div>
@@ -473,7 +493,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-[#070b18] text-right">
+        <div className="p-4 border-t border-slate-800 bg-[#070b18] text-right print:hidden">
           <button
             onClick={onClose}
             className="px-5 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors"

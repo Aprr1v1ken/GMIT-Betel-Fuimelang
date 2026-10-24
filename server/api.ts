@@ -282,7 +282,7 @@ apiRouter.put('/members/:id', (req, res) => {
         kabupaten = ?, phone = ?, email = ?, marital_status = ?, spouse_name = ?, rayon_id = ?,
         categorial_group_id = ?, membership_status = ?, baptism_status = ?, baptism_date = ?,
         confirmation_status = ?, confirmation_date = ?, marriage_church_status = ?, marriage_date = ?,
-        education = ?, occupation = ?, status = ?, notes = ?, updated_at = ?
+        education = ?, occupation = ?, status = ?, notes = ?, photo_url = ?, updated_at = ?
       WHERE id = ?
     `).run(
       data.fullName, data.nickname || '', data.nik || '', data.familyCardNo || '', data.familyId || '',
@@ -293,7 +293,7 @@ apiRouter.put('/members/:id', (req, res) => {
       data.baptismStatus || 'Belum', data.baptismDate || '', data.confirmationStatus || 'Belum',
       data.confirmationDate || '', data.marriageChurchStatus || 'Belum', data.marriageDate || '',
       data.education || '', data.occupation || '', data.status || 'Aktif', data.notes || '',
-      now, id
+      data.photoUrl || '', now, id
     );
 
     addAuditLog('admin', 'Admin', 'Ubah Jemaat', 'Database Jemaat', `Mengubah data anggota jemaat: ${data.fullName}`);
@@ -448,9 +448,31 @@ apiRouter.post('/staff', (req, res) => {
   const id = 'st-' + Date.now();
   try {
     db.prepare('INSERT INTO church_staff (id, member_id, name, position, period, phone, email, status) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)')
-      .run(id, data.name, data.position, data.period || '2024 - 2027', data.phone || '', data.email || '', data.status || 'Aktif');
+      .run(id, data.name, data.position, data.period || '2026 - 2029', data.phone || '', data.email || '', data.status || 'Aktif');
     addAuditLog('admin', 'Admin', 'Tambah Majelis', 'Majelis & Pendeta', `Menambahkan pelayan majelis: ${data.name}`);
     res.json({ success: true, message: 'Pelayan majelis berhasil ditambahkan' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/staff/:id', (req, res) => {
+  const db = getDb();
+  try {
+    db.prepare('DELETE FROM church_staff WHERE id = ?').run(req.params.id);
+    addAuditLog('admin', 'Admin', 'Hapus Majelis', 'Majelis & Pendeta', `Menghapus data pelayan majelis ID: ${req.params.id}`);
+    res.json({ success: true, message: 'Data pelayan majelis berhasil dihapus' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/staff', (req, res) => {
+  const db = getDb();
+  try {
+    db.prepare('DELETE FROM church_staff').run();
+    addAuditLog('admin', 'Admin', 'Kosongkan Majelis', 'Majelis & Pendeta', 'Mengosongkan seluruh data pelayan majelis');
+    res.json({ success: true, message: 'Seluruh data pelayan majelis berhasil dikosongkan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -869,6 +891,7 @@ apiRouter.get('/announcements', (req, res) => {
       content: a.content,
       author: a.author,
       isImportant: Boolean(a.is_important),
+      imageUrl: a.image_url || '',
     })),
   });
 });
@@ -881,9 +904,9 @@ apiRouter.post('/announcements', (req, res) => {
 
   try {
     db.prepare(`
-      INSERT INTO announcements (id, title, date, category, content, author, is_important)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.title, data.date || now, data.category || 'Warta Ibadah', data.content, data.author || 'Sekretariat Majelis', data.isImportant ? 1 : 0);
+      INSERT INTO announcements (id, title, date, category, content, author, is_important, image_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, data.title, data.date || now, data.category || 'Warta Ibadah', data.content, data.author || 'Sekretariat Majelis', data.isImportant ? 1 : 0, data.imageUrl || '');
 
     addAuditLog('admin', 'Admin', 'Terbitkan Warta', 'Warta & Pengumuman', `Menerbitkan warta jemaat: ${data.title}`);
     res.json({ success: true, message: 'Warta jemaat berhasil diterbitkan' });

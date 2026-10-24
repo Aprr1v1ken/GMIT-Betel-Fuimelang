@@ -277,10 +277,22 @@ export interface Announcement {
   id: string;
   title: string;
   date: string;
-  category: 'Warta Ibadah' | 'Pengumuman Nikah' | 'Berita Sukacita' | 'Berita Dukacita' | 'Keuangan' | 'Umum';
+  category: 
+    | 'Warta Ibadah' 
+    | 'Bakti Jumat & Gotong Royong'
+    | 'Aksi Kasih & Diakonia'
+    | 'Kegiatan Kategorial & Rayon'
+    | 'Pembangunan & Lingkungan'
+    | 'Pengumuman Nikah' 
+    | 'Berita Sukacita' 
+    | 'Berita Dukacita' 
+    | 'Keuangan' 
+    | 'Umum'
+    | string;
   content: string;
   author: string;
   isImportant?: boolean;
+  imageUrl?: string;
 }
 
 export interface DataCorrectionRequest {

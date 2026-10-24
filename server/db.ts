@@ -259,7 +259,8 @@ function initSchema(db: DatabaseSync) {
       category TEXT NOT NULL,
       content TEXT NOT NULL,
       author TEXT NOT NULL,
-      is_important INTEGER DEFAULT 0
+      is_important INTEGER DEFAULT 0,
+      image_url TEXT
     );
 
     CREATE TABLE IF NOT EXISTS data_correction_requests (
@@ -283,6 +284,24 @@ function initSchema(db: DatabaseSync) {
     );
   `);
 
+  // Column upgrades for existing databases
+  try {
+    db.exec("ALTER TABLE members ADD COLUMN photo_url TEXT;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE announcements ADD COLUMN image_url TEXT;");
+  } catch {}
+
+  // Ensure old demo staff, old dummy liturgist and preacher are emptied so user can input real actual data
+  try {
+    db.exec("DELETE FROM church_staff;");
+    db.exec("UPDATE service_schedules SET liturgist = '', preacher = '', elder_duty = '', deacon_duty = '', song_leader = '', musicians = '', multimedia_operator = '', usher = '', bible_reader = '';");
+    db.exec("UPDATE rayons SET leader_name = '', leader_phone = '';");
+    db.exec("UPDATE categorial_groups SET coordinator = '';");
+  } catch (cleanErr) {
+    console.warn('DB clean old staff check:', cleanErr);
+  }
+
   seedInitialData(db);
 }
 
@@ -293,45 +312,33 @@ function seedInitialData(db: DatabaseSync) {
     return;
   }
 
-  // 1. Rayons (Tepat 4 Rayon: Rayon I, II, III, IV)
+  // 1. Rayons (Tepat 4 Rayon: Rayon I, II, III, IV) - leader_name emptied for user to input real actual data
   const rayons = [
-    { id: 'r1', code: 'RY-01', name: 'Rayon I', leader_name: 'Pnt. Yulius Banamtuan', leader_phone: '0812-3901-4411', coverage_area: 'Fuimelang Pusat & Pasar Lama', notes: 'Wilayah pelayanan sektor I' },
-    { id: 'r2', code: 'RY-02', name: 'Rayon II', leader_name: 'Pnt. Sarah Lopo-Mone', leader_phone: '0813-5322-8877', coverage_area: 'Kompleks SD Betel & Liku', notes: 'Wilayah pelayanan sektor II' },
-    { id: 'r3', code: 'RY-03', name: 'Rayon III', leader_name: 'Pnt. Soleman Malaikosa', leader_phone: '0852-3911-0022', coverage_area: 'Fuimelang Atas & Kebun Sirih', notes: 'Wilayah pelayanan sektor III' },
-    { id: 'r4', code: 'RY-04', name: 'Rayon IV', leader_name: 'Pnt. Martha Doko-Lobo', leader_phone: '0821-4455-6677', coverage_area: 'Pesisir Pantai, Dermaga & Moru', notes: 'Wilayah pelayanan sektor IV' },
+    { id: 'r1', code: 'RY-01', name: 'Rayon I', leader_name: '', leader_phone: '', coverage_area: 'Fuimelang Pusat & Pasar Lama', notes: 'Wilayah pelayanan sektor I' },
+    { id: 'r2', code: 'RY-02', name: 'Rayon II', leader_name: '', leader_phone: '', coverage_area: 'Kompleks SD Betel & Liku', notes: 'Wilayah pelayanan sektor II' },
+    { id: 'r3', code: 'RY-03', name: 'Rayon III', leader_name: '', leader_phone: '', coverage_area: 'Fuimelang Atas & Kebun Sirih', notes: 'Wilayah pelayanan sektor III' },
+    { id: 'r4', code: 'RY-04', name: 'Rayon IV', leader_name: '', leader_phone: '', coverage_area: 'Pesisir Pantai, Dermaga & Moru', notes: 'Wilayah pelayanan sektor IV' },
   ];
   const insertRayon = db.prepare('INSERT INTO rayons (id, code, name, leader_name, leader_phone, coverage_area, notes) VALUES (?, ?, ?, ?, ?, ?, ?)');
   for (const r of rayons) {
     insertRayon.run(r.id, r.code, r.name, r.leader_name, r.leader_phone, r.coverage_area, r.notes);
   }
 
-  // 2. Kategorial
+  // 2. Kategorial - coordinator emptied for user to input real actual data
   const categorials = [
-    { id: 'c1', code: 'PAR', name: 'Pelayanan Anak dan Remaja (PAR)', target_age_desc: '0 - 15 Tahun', coordinator: 'Pnt. Maria Salukh' },
-    { id: 'c2', code: 'PEMUDA', name: 'Gerakan Pemuda GMIT (GP GMIT)', target_age_desc: '16 - 30 Tahun', coordinator: 'Sdr. Johanis Lopo' },
-    { id: 'c3', code: 'PKP', name: 'Persekutuan Kaum Perempuan GMIT (PKP)', target_age_desc: 'Ibu-ibu Jemaat', coordinator: 'Pnt. Debora Kase-Blegur' },
-    { id: 'c4', code: 'PKB', name: 'Persekutuan Kaum Bapak GMIT (PKB)', target_age_desc: 'Bapak-bapak Jemaat', coordinator: 'Pnt. Simon Malaipada' },
-    { id: 'c5', code: 'LANSIA', name: 'Persekutuan Usia Indah (Lansia)', target_age_desc: 'Usia 60 Tahun ke atas', coordinator: 'Pnt. Kornelius Tefa' },
+    { id: 'c1', code: 'PAR', name: 'Pelayanan Anak dan Remaja (PAR)', target_age_desc: '0 - 15 Tahun', coordinator: '' },
+    { id: 'c2', code: 'PEMUDA', name: 'Gerakan Pemuda GMIT (GP GMIT)', target_age_desc: '16 - 30 Tahun', coordinator: '' },
+    { id: 'c3', code: 'PKP', name: 'Persekutuan Kaum Perempuan GMIT (PKP)', target_age_desc: 'Ibu-ibu Jemaat', coordinator: '' },
+    { id: 'c4', code: 'PKB', name: 'Persekutuan Kaum Bapak GMIT (PKB)', target_age_desc: 'Bapak-bapak Jemaat', coordinator: '' },
+    { id: 'c5', code: 'LANSIA', name: 'Persekutuan Usia Indah (Lansia)', target_age_desc: 'Usia 60 Tahun ke atas', coordinator: '' },
   ];
   const insertCat = db.prepare('INSERT INTO categorial_groups (id, code, name, target_age_desc, coordinator) VALUES (?, ?, ?, ?, ?)');
   for (const c of categorials) {
     insertCat.run(c.id, c.code, c.name, c.target_age_desc, c.coordinator);
   }
 
-  // 3. Church Staff / Majelis (Periode 2026 - 2029)
-  const staff = [
-    { id: 'st1', name: 'Pdt. Sonya W. Isu, S.Th', position: 'Ketua Majelis Jemaat / Pendeta', period: '2026 - 2029', phone: '085173095482', email: 'pdt.sonya@gmitbetel.id', status: 'Aktif' },
-    { id: 'st2', name: 'Pdt. Yohana E. Kolly, S.Th', position: 'Pendeta Pelayan', period: '2026 - 2029', phone: '0813-5311-2233', email: 'pdt.yohana@gmitbetel.id', status: 'Aktif' },
-    { id: 'st3', name: 'Pnt. Daniel Malaipada', position: 'Wakil Ketua Majelis', period: '2026 - 2029', phone: '0852-3988-7766', email: 'daniel.malaipada@gmitbetel.id', status: 'Aktif' },
-    { id: 'st4', name: 'Dkn. Elisabeth Lopo', position: 'Sekretaris', period: '2026 - 2029', phone: '0812-3877-4455', email: 'elisabeth.lopo@gmitbetel.id', status: 'Aktif' },
-    { id: 'st5', name: 'Dkn. Samuel Blegur', position: 'Bendahara', period: '2026 - 2029', phone: '0821-4466-9988', email: 'samuel.blegur@gmitbetel.id', status: 'Aktif' },
-    { id: 'st6', name: 'Pnt. Yulius Banamtuan', position: 'Penatua Rayon I', period: '2026 - 2029', phone: '0812-3901-4411', email: 'yulius.b@gmitbetel.id', status: 'Aktif' },
-    { id: 'st7', name: 'Pnt. Sarah Lopo-Mone', position: 'Penatua Rayon II', period: '2026 - 2029', phone: '0813-5322-8877', email: 'sarah.l@gmitbetel.id', status: 'Aktif' },
-  ];
-  const insertStaff = db.prepare('INSERT INTO church_staff (id, member_id, name, position, period, phone, email, status) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)');
-  for (const s of staff) {
-    insertStaff.run(s.id, s.name, s.position, s.period, s.phone, s.email, s.status);
-  }
+  // 3. Church Staff / Majelis (Dikosongkan agar pengguna dapat menginput nama pelayan riil)
+  // Tidak ada staff bawaan agar bersih dan murni diisi data sebenarnya.
 
   // 4. Users (Official Accounts)
   const users = [
@@ -532,9 +539,9 @@ function seedCongregationData(db: DatabaseSync) {
   `);
   insertSchedule.run(
     'sch-1', '2026-10-25 09:00', 'Kebaktian Minggu Pagi - Minggu XXI Setelah Pentakosta',
-    'Pdt. Sonya W. Isu, S.Th', 'Pnt. Daniel Malaipada', 'Pnt. Yulius Banamtuan, Pnt. Sarah Lopo',
-    'Dkn. Elisabeth Lopo, Dkn. Samuel Blegur', 'Sdri. Martha Kolly', 'Sdr. Daniel Banamtuan (Keyboard)',
-    'Sdr. Johanis Lopo', 'Pemuda GP GMIT Rayon I', 'Ibu Naomi Malaikosa', 'Kebaktian Umum dengan Perjamuan Kudus'
+    '', '', '',
+    '', '', '',
+    '', '', '', 'Kebaktian Umum dengan Perjamuan Kudus'
   );
 
   // 4. Financial Transactions

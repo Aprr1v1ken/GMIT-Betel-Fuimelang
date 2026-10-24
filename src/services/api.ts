@@ -114,6 +114,16 @@ export async function createStaffApi(data: Partial<ChurchStaff>) {
   return res.json();
 }
 
+export async function deleteStaffApi(id: string) {
+  const res = await fetch(`${API_BASE}/staff/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function clearAllStaffApi() {
+  const res = await fetch(`${API_BASE}/staff`, { method: 'DELETE' });
+  return res.json();
+}
+
 export async function fetchSacramentsApi() {
   const res = await fetch(`${API_BASE}/sacraments`);
   return res.json();
@@ -404,4 +414,23 @@ export async function generateBibleStudyApi(data: {
   });
   return res.json();
 }
+
+export async function generateChurchNewsApi(data: {
+  category: string;
+  title: string;
+  date: string;
+  location?: string;
+  coordinator?: string;
+  participants?: string;
+  notes?: string;
+  imageUrl?: string;
+}) {
+  const res = await fetch(`${API_BASE}/ai/church-news`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
 

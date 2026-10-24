@@ -58,12 +58,12 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
   const [scriptureText, setScriptureText] = useState('Mazmur 23:1-6 & Yohanes 10:11-16');
   
   // Officers
-  const [preacher, setPreacher] = useState('Pdt. Sonya W. Isu, S.Th');
-  const [liturgist, setLiturgist] = useState('Pnt. Daniel Malaipada');
-  const [dutyElders, setDutyElders] = useState('Pnt. Yulius Banamtuan, Pnt. Sarah Lopo-Mone');
-  const [dutyDeacons, setDutyDeacons] = useState('Dkn. Elisabeth Lopo, Dkn. Samuel Blegur');
-  const [musicians, setMusicians] = useState('Sdr. Daniel Banamtuan (Keyboard)');
-  const [songLeader, setSongLeader] = useState('Sdri. Martha Kolly (Kantoria GP GMIT)');
+  const [preacher, setPreacher] = useState('');
+  const [liturgist, setLiturgist] = useState('');
+  const [dutyElders, setDutyElders] = useState('');
+  const [dutyDeacons, setDutyDeacons] = useState('');
+  const [musicians, setMusicians] = useState('');
+  const [songLeader, setSongLeader] = useState('');
 
   // Bulletin Points
   const [announcements, setAnnouncements] = useState<string[]>([
@@ -77,10 +77,10 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
 
   // Rayon Service Schedules
   const [rayonSchedules, setRayonSchedules] = useState([
-    { rayon: 'Rayon I (Pusat & Pasar Lama)', day: 'Rabu, 17.00 WITA', host: 'Kel. Banamtuan - Kase', leader: 'Pnt. Yulius Banamtuan' },
-    { rayon: 'Rayon II (Kompleks SD Betel & Liku)', day: 'Rabu, 17.00 WITA', host: 'Kel. Lopo - Mone', leader: 'Pnt. Sarah Lopo-Mone' },
-    { rayon: 'Rayon III (Fuimelang Atas & Kebun Sirih)', day: 'Rabu, 17.00 WITA', host: 'Kel. Malaikosa - Blegur', leader: 'Pnt. Soleman Malaikosa' },
-    { rayon: 'Rayon IV (Pesisir Pantai & Dermaga Moru)', day: 'Rabu, 17.00 WITA', host: 'Kel. Malaipada - Doko', leader: 'Pnt. Simon Malaipada' },
+    { rayon: 'Rayon I (Pusat & Pasar Lama)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
+    { rayon: 'Rayon II (Kompleks SD Betel & Liku)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
+    { rayon: 'Rayon III (Fuimelang Atas & Kebun Sirih)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
+    { rayon: 'Rayon IV (Pesisir Pantai & Dermaga Moru)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
   ]);
 
   // Financial Summary

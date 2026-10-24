@@ -105,6 +105,7 @@ export default function App() {
   const [showKoboExportModal, setShowKoboExportModal] = useState(false);
   const [showWartaPdfModal, setShowWartaPdfModal] = useState(false);
   const [reportType, setReportType] = useState<'members' | 'rayons' | 'finance' | 'sacraments' | 'attendance'>('members');
+  const [aiActiveTab, setAiActiveTab] = useState<string>('counseling');
 
   // Server Data States - initialize members with locally cached data for instant display
   const [members, setMembers] = useState<Member[]>(() => getCachedMembersLocally());
@@ -510,6 +511,16 @@ export default function App() {
     await loadAllData();
   };
 
+  const handleDeleteStaff = async (id: string) => {
+    await api.deleteStaffApi(id);
+    await loadAllData();
+  };
+
+  const handleClearAllStaff = async () => {
+    await api.clearAllStaffApi();
+    await loadAllData();
+  };
+
   // Sacrament handlers
   const handleSaveBaptism = async (data: any) => {
     await api.createBaptismApi(data);
@@ -715,6 +726,10 @@ export default function App() {
                 setShowMemberDetailModal(true);
               }}
               onOpenComposeWarta={() => setShowWartaPdfModal(true)}
+              onOpenSpiritualAiTab={(tab) => {
+                setAiActiveTab(tab);
+                setCurrentView('ai-assistant');
+              }}
             />
           )}
 
@@ -724,6 +739,7 @@ export default function App() {
               rayons={rayons}
               stats={stats}
               onAddAnnouncement={handleAddAnnouncement}
+              initialTab={aiActiveTab as any}
             />
           )}
 
@@ -806,6 +822,8 @@ export default function App() {
             <StaffView
               staff={staff}
               onAddStaff={handleAddStaff}
+              onDeleteStaff={handleDeleteStaff}
+              onClearAllStaff={handleClearAllStaff}
             />
           )}
 

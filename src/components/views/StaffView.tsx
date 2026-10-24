@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
-import { Award, UserCheck, Plus, Phone, Mail, CheckCircle2 } from 'lucide-react';
+import { Award, UserCheck, Plus, Phone, Mail, CheckCircle2, Trash2, AlertCircle } from 'lucide-react';
 import type { ChurchStaff } from '../../types/index.ts';
 
 interface StaffViewProps {
   staff: ChurchStaff[];
   onAddStaff: (data: Partial<ChurchStaff>) => Promise<void>;
+  onDeleteStaff?: (id: string) => Promise<void>;
+  onClearAllStaff?: () => Promise<void>;
 }
 
-export const StaffView: React.FC<StaffViewProps> = ({ staff, onAddStaff }) => {
+export const StaffView: React.FC<StaffViewProps> = ({
+  staff,
+  onAddStaff,
+  onDeleteStaff,
+  onClearAllStaff,
+}) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
   const [position, setPosition] = useState<any>('Penatua Rayon');
@@ -40,6 +47,13 @@ export const StaffView: React.FC<StaffViewProps> = ({ staff, onAddStaff }) => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!confirm('Apakah Anda yakin ingin mengosongkan seluruh data pelayan/majelis agar dapat menginput data riil dari awal?')) return;
+    if (onClearAllStaff) {
+      await onClearAllStaff();
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -54,57 +68,105 @@ export const StaffView: React.FC<StaffViewProps> = ({ staff, onAddStaff }) => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Tambah Pelayan Majelis</span>
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+          {staff.length > 0 && onClearAllStaff && (
+            <button
+              onClick={handleClearAll}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-red-950/50 hover:bg-red-900/60 text-red-300 border border-red-500/30 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Kosongkan Semua</span>
+            </button>
+          )}
 
-      {/* Staff Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {staff.map((s) => (
-          <div
-            key={s.id}
-            className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 hover:border-amber-400/40 transition-all space-y-3 flex flex-col justify-between"
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
           >
-            <div>
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 text-[10px] uppercase">
-                  {s.position}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {s.period}
-                </span>
-              </div>
-
-              <h3 className="text-base font-bold text-white mt-1">{s.name}</h3>
-              <div className="text-xs text-slate-400 mt-2 space-y-1">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="font-mono">{s.phone || '0812-xxxx-xxxx'}</span>
-                </div>
-                {s.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="truncate">{s.email}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
-              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>{s.status}</span>
-              </span>
-              <span className="text-[10px] text-slate-400">Klasis Alor Tengah Utara</span>
-            </div>
-          </div>
-        ))}
+            <Plus className="w-4 h-4" />
+            <span>+ Tambah Pelayan Majelis</span>
+          </button>
+        </div>
       </div>
+
+      {/* Staff Grid or Empty State */}
+      {staff.length === 0 ? (
+        <div className="py-16 px-6 rounded-2xl bg-[#0c1329]/60 border border-dashed border-amber-500/30 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+            <Award className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-white">
+              Data Pelayan & Majelis Siap Diinput Mandiri
+            </h3>
+            <p className="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">
+              Nama-nama lama bawaan sistem telah dikosongkan seluruhnya. Silakan mulai menginput nama-nama riil Pendeta, Penatua, Diaken, dan Pengajar GMIT Betel Fuimelang saat ini.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Input Data Majelis & Pelayan Riil</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {staff.map((s) => (
+            <div
+              key={s.id}
+              className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 hover:border-amber-400/40 transition-all space-y-3 flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 text-[10px] uppercase">
+                    {s.position}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {s.period}
+                    </span>
+                    {onDeleteStaff && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Hapus data ${s.name}?`)) onDeleteStaff(s.id);
+                        }}
+                        className="p-1 text-slate-500 hover:text-red-400 transition cursor-pointer"
+                        title="Hapus pelayan ini"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <h3 className="text-base font-bold text-white mt-1">{s.name}</h3>
+                <div className="text-xs text-slate-400 mt-2 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="font-mono">{s.phone || '-'}</span>
+                  </div>
+                  {s.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="truncate">{s.email}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{s.status}</span>
+                </span>
+                <span className="text-[10px] text-slate-400">Klasis Alor Tengah Utara</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Staff Modal */}
       {showAddModal && (

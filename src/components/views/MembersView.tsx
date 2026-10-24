@@ -319,21 +319,32 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">
-                            {member.fullName}
-                          </span>
-                          {member.isOfflinePending && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                              ⏳ Antrean Sinkron
-                            </span>
-                          )}
-                        </div>
-                        {member.nickname && (
-                          <div className="text-[11px] text-slate-400">
-                            Panggilan: {member.nickname}
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-9 rounded-md bg-slate-800 border border-amber-500/30 overflow-hidden shrink-0 flex items-center justify-center shadow-sm">
+                            {member.photoUrl ? (
+                              <img src={member.photoUrl} alt={member.fullName} className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-4 h-4 text-amber-400/60" />
+                            )}
                           </div>
-                        )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-white">
+                                {member.fullName}
+                              </span>
+                              {member.isOfflinePending && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  ⏳ Antrean Sinkron
+                                </span>
+                              )}
+                            </div>
+                            {member.nickname && (
+                              <div className="text-[11px] text-slate-400">
+                                Panggilan: {member.nickname}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3 px-3 font-semibold text-slate-300">
                         {member.gender === 'Laki-laki' ? 'L' : 'P'}

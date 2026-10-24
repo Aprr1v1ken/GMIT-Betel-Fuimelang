@@ -22,15 +22,15 @@ export const EventsView: React.FC<EventsViewProps> = ({
   // Schedule form states
   const [serviceDate, setServiceDate] = useState('25-10-2026');
   const [serviceName, setServiceName] = useState('Kebaktian Minggu Pagi I (06.30 WITA)');
-  const [preacher, setPreacher] = useState('Pdt. Sonya W. Isu, S.Th');
-  const [liturgist, setLiturgist] = useState('Pnt. Daniel Malaipada');
-  const [elderDuty, setElderDuty] = useState('Pnt. Yulius Banamtuan, Pnt. Markus Oematan');
-  const [deaconDuty, setDeaconDuty] = useState('Dkn. Elisabeth Lopo, Dkn. Samuel Blegur');
-  const [songLeader, setSongLeader] = useState('Ruth Doko-Lobo');
-  const [musicians, setMusicians] = useState('Andreas Doko (Organis)');
-  const [multimedia, setMultimedia] = useState('Tim Multimedia Pemuda GMIT');
-  const [usher, setUsher] = useState('Dkn. Soleman Blegur & Tim Diaken');
-  const [bibleReader, setBibleReader] = useState('Sdri. Rachel Mone');
+  const [preacher, setPreacher] = useState('');
+  const [liturgist, setLiturgist] = useState('');
+  const [elderDuty, setElderDuty] = useState('');
+  const [deaconDuty, setDeaconDuty] = useState('');
+  const [songLeader, setSongLeader] = useState('');
+  const [musicians, setMusicians] = useState('');
+  const [multimedia, setMultimedia] = useState('');
+  const [usher, setUsher] = useState('');
+  const [bibleReader, setBibleReader] = useState('');
   const [savingSchedule, setSavingSchedule] = useState(false);
 
   // Event form states
@@ -39,7 +39,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
   const [eventStart, setEventStart] = useState('2026-10-25 06:30:00');
   const [eventEnd, setEventEnd] = useState('2026-10-25 08:00:00');
   const [eventLocation, setEventLocation] = useState('Gedung Kebaktian Utama');
-  const [eventPic, setEventPic] = useState('Pdt. Sonya W. Isu, S.Th');
+  const [eventPic, setEventPic] = useState('');
   const [eventDesc, setEventDesc] = useState('');
   const [savingEvent, setSavingEvent] = useState(false);
 

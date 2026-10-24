@@ -18,3 +18,73 @@
 .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
+
+/* RGB Neon Gradient Animation */
+@keyframes rgbGlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-rgb-glow {
+  background-size: 200% 200%;
+  animation: rgbGlow 6s ease infinite;
+}
+
+/* Media Print Rules - Clean, crisp, high-contrast printing for ID Cards and Reports */
+@media print {
+  @page {
+    size: auto;
+    margin: 8mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  aside,
+  nav,
+  header,
+  .no-print,
+  [role="navigation"],
+  button {
+    display: none !important;
+  }
+
+  /* Expand modal containers so only the printable payload shows */
+  .fixed.inset-0 {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .printable-card {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 auto !important;
+  }
+
+  .print-page-break {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+}

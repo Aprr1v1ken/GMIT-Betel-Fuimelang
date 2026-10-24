@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   BookOpen,
@@ -47,6 +47,7 @@ interface AIAssistantViewProps {
   rayons: Rayon[];
   stats: any;
   onAddAnnouncement?: (data: any) => Promise<void>;
+  initialTab?: AITabType;
 }
 
 export type AITabType =
@@ -66,8 +67,15 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   rayons,
   stats,
   onAddAnnouncement,
+  initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<AITabType>('counseling');
+  const [activeTab, setActiveTab] = useState<AITabType>(initialTab || 'counseling');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);

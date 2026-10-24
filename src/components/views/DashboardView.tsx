@@ -34,6 +34,12 @@ import {
   PieChart as PieChartIcon,
   Activity,
   Layers,
+  MessageSquare,
+  Sun,
+  Music,
+  Baby,
+  HelpCircle,
+  Flame,
 } from 'lucide-react';
 import { formatRupiah } from '../../utils/church-logic.ts';
 import type { Member, Family, FinancialTransaction, ChurchEvent, ServiceSchedule } from '../../types/index.ts';
@@ -79,6 +85,7 @@ interface DashboardViewProps {
   onOpenAddAttendance: () => void;
   onOpenMemberDetail?: (member: Member) => void;
   onOpenComposeWarta?: () => void;
+  onOpenSpiritualAiTab?: (tab: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -91,6 +98,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddAttendance,
   onOpenMemberDetail,
   onOpenComposeWarta,
+  onOpenSpiritualAiTab,
 }) => {
   if (!stats) {
     return (
@@ -399,11 +407,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           )}
           <button
-            onClick={() => onNavigate('ai-assistant')}
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('counseling') : onNavigate('ai-assistant'))}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-gradient-to-r from-amber-500/25 to-amber-600/25 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 transition-colors cursor-pointer shadow-sm"
+            title="Akses Asisten AI Rohani & Pastoral (100% Gratis)"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Asisten AI Pastoral</span>
+            <span>AI Rohani (Gratis)</span>
           </button>
         </div>
       </div>
@@ -558,6 +567,202 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span>Bagikan ke WhatsApp</span>
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: PUSAT AI ROHANI KRISTEN (GRATIS & TERINTEGRASI GMIT) */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#0c142e] via-[#0f1b3b] to-[#1a1133] border border-amber-500/30 shadow-xl space-y-5 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4 relative z-10">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                100% Gratis & Terintegrasi GMIT
+              </span>
+              <span className="text-[11px] text-slate-400">Pusat Kecerdasan Pelayanan</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight flex items-center gap-2">
+              <span>Layanan AI Rohani Kristen & Pastoral</span>
+            </h3>
+            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+              Kecerdasan buatan berbasis Kitab Suci (TB LAI) dan tradisi Reformasi GMIT untuk memfasilitasi konseling iman, santapan rohani harian, tata liturgi rayon, bahan ajar Sekolah Minggu (PAR), dan khotbah kontekstual.
+            </p>
+          </div>
+
+          <button
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('counseling') : onNavigate('ai-assistant'))}
+            className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all cursor-pointer shrink-0"
+          >
+            <span>Buka Semua Modul AI</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 6 Interactive Spiritual AI Feature Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 relative z-10">
+          {/* 1. Konseling & Bimbingan Iman */}
+          <div
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('counseling') : onNavigate('ai-assistant'))}
+            className="p-4 rounded-xl bg-[#091024] hover:bg-[#0d1633] border border-amber-500/20 hover:border-amber-400/50 transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  Konseling
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
+                1. Bimbingan & Konseling Iman
+              </h4>
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                Tanya jawab pergumulan iman, kekhawatiran rezeki, kedukaan, serta penyerahan hidup dalam doa.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-amber-400 font-semibold">
+              <span>Buka Konseling</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 2. Santapan Rohani Harian */}
+          <div
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('devotional') : onNavigate('ai-assistant'))}
+            className="p-4 rounded-xl bg-[#091024] hover:bg-[#0d1633] border border-emerald-500/20 hover:border-emerald-400/50 transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Sun className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  Renungan WA
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                2. Santapan Rohani Harian
+              </h4>
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                Renungan pagi & malam berakar nats Alkitab LAI, lengkap format siap kirim 1-klik ke WhatsApp Rayon.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-emerald-400 font-semibold">
+              <span>Buat Renungan Hari Ini</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 3. Penuntun Liturgi Khusus */}
+          <div
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('liturgy') : onNavigate('ai-assistant'))}
+            className="p-4 rounded-xl bg-[#091024] hover:bg-[#0d1633] border border-sky-500/20 hover:border-sky-400/50 transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Music className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                  Liturgi GMIT
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
+                3. Tata Ibadah & Liturgi Khusus
+              </h4>
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                Susun ibadah rumah tangga rayon, syukur panen Alor, atau malam kedukaan lengkap usulan Kidung Jemaat.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-sky-400 font-semibold">
+              <span>Susun Tata Ibadah</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 4. Sahabat Guru PAR / Sekolah Minggu */}
+          <div
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('sunday-school') : onNavigate('ai-assistant'))}
+            className="p-4 rounded-xl bg-[#091024] hover:bg-[#0d1633] border border-pink-500/20 hover:border-pink-400/50 transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-lg bg-pink-500/15 text-pink-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Baby className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/20">
+                  Sekolah Minggu
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white group-hover:text-pink-300 transition-colors">
+                4. Bahan Cerita Anak & PAR
+              </h4>
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                Naskah cerita interaktif, alat peraga alam (batu, daun kemiri, jagung), ayat hafalan, lagu & kuis ceria.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-pink-400 font-semibold">
+              <span>Buka Bahan PAR</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 5. Penelaahan Alkitab (PA Rayon) */}
+          <div
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('bible-study') : onNavigate('ai-assistant'))}
+            className="p-4 rounded-xl bg-[#091024] hover:bg-[#0d1633] border border-indigo-500/20 hover:border-indigo-400/50 transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <HelpCircle className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  PA Rayon
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
+                5. Panduan Diskusi PA Rayon
+              </h4>
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                Tafsiran teks firman, 4 pertanyaan diskusi persekutuan, dan komitmen iman di tengah masyarakat.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-indigo-400 font-semibold">
+              <span>Buka Panduan PA</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 6. Asisten Khotbah & Renungan Kontekstual */}
+          <div
+            onClick={() => (onOpenSpiritualAiTab ? onOpenSpiritualAiTab('sermon') : onNavigate('ai-assistant'))}
+            className="p-4 rounded-xl bg-[#091024] hover:bg-[#0d1633] border border-amber-500/20 hover:border-amber-400/50 transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  Khotbah GMIT
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
+                6. Draf Khotbah Kontekstual Alor
+              </h4>
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                Bantu Pendeta & Majelis menyusun kerangka khotbah eksegesis berlatar pergumulan warga jemaat Alor.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-amber-400 font-semibold">
+              <span>Susun Khotbah</span>
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
           </div>
         </div>
       </div>

@@ -703,3 +703,130 @@ Iman sejati tidak tinggal diam di dalam kepala. Iman sejati memiliki mata yang m
 
   return res.json({ success: true, text: fallback });
 });
+
+// 10. AI Generator Berita & Bakti Jumat Gereja Otomatis
+aiRouter.post('/church-news', async (req, res) => {
+  const {
+    category = 'Bakti Jumat & Gotong Royong',
+    title = 'Kerja Bakti Jumat Bersih & Pembersihan Lingkungan Gedung Gereja Betel Fuimelang',
+    date = 'Jumat, 24 Oktober 2026',
+    location = 'Halaman Gedung Gereja & Pastori GMIT Betel Fuimelang',
+    coordinator = 'Badan Pengurus Pemuda & Kaum Bapak',
+    participants = 'Seluruh Warga Rayon I s/d IV dan Pemuda',
+    notes = 'Pembersihan saluran air musim hujan, pemotongan rumput halaman gereja, perapian pagar bambu, serta penanaman bibit pohon peneduh, ditutup doa syukur dan santap ubi keladi bersama.',
+    imageUrl = '',
+  } = req.body;
+
+  const prompt = `Anda adalah jurnalis gerejawi dan sekretariat komunikasi GMIT Betel Fuimelang, Desa Lembur Tengah, Klasis Alor Tengah Utara, NTT.
+Tugas Anda adalah menyusun Laporan Berita / Warta Liputan Kegiatan Gerejawi & Bakti Jumat yang sangat hidup, inspiratif, kristiani, dan resmi dengan rincian:
+- Kategori Kegiatan: ${category}
+- Nama/Tema Kegiatan: ${title}
+- Waktu Pelaksanaan: ${date}
+- Tempat/Lokasi: ${location}
+- Koordinator / Penanggung Jawab: ${coordinator}
+- Peserta/Partisipasi: ${participants}
+- Catatan / Hasil Pekerjaan: ${notes}
+
+Buatlah laporan berita gereja yang lengkap dengan bagian-bagian berikut:
+
+1. JUDUL BERITA RESMI:
+(Judul yang menarik, menggugah persaudaraan, dan bernuansa iman Kristen GMIT)
+
+2. AYAT ALKITAB RUJUKAN:
+(Ayat penopang semangat kerja bersama, gotong royong, dan pelayanan kasih, contoh Kolose 3:23, Galatia 6:2, atau Mazmur 133:1)
+
+3. RINGKASAN WARTA SINGKAT (1 Paragraf):
+(Intisari kegiatan untuk dibacakan pada warta mimbar atau rangkuman cepat)
+
+4. LIPUTAN BERITA LENGKAP:
+- Pembukaan & Latar Belakang Semangat Gotong Royong
+- Jalannya Kegiatan & Antusiasme Warga Jemaat / Pemuda
+- Hasil-hasil Nyata Pelaksanaan Bakti / Kegiatan
+- Kesaksian / Pesan Gembala atau Koordinator Pelaksana
+- Rencana Tindak Lanjut Pemeliharaan Bersama
+
+5. TEKS FORMAT WHATSAPP SIAP SEBAR:
+(Format teks dengan emoji kristiani, tebal, miring, poin-poin rapi, cocok dibagikan ke grup WA Rayon & Jemaat GMIT)
+
+6. DOA SYUKUR PENUTUP KEGIATAN:
+(Naskah doa syukur atas kelancaran bakti jumat dan kesehatan seluruh warga yang berpartisipasi)`;
+
+  try {
+    if (ai) {
+      const response = await ai.models.generateContent({
+        model: DEFAULT_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: 'Anda adalah redaktur media jemaat GMIT yang berwawasan kasih Kristus, menjunjung tinggi nilai kearifan gotong-royong Nusa Tenggara Timur, dan teliti dalam penyusunan berita pelayanan gereja.',
+        },
+      });
+      return res.json({
+        success: true,
+        text: response.text || '',
+        category,
+        title,
+        date,
+        location,
+        imageUrl,
+      });
+    }
+  } catch (err: any) {
+    console.warn('Gemini church news failed, using fallback:', err?.message);
+  }
+
+  const fallback = `LAPORAN WARTA & BERITA KEGIATAN GEREJA
+GMIT BETEL FUIMELANG — KLASIS ALOR TENGAH UTARA
+Kategori: ${category}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. JUDUL BERITA RESMI:
+"Semangat Kasih & Gotong Royong: Warga Jemaat GMIT Betel Fuimelang Gelar ${title}"
+
+2. AYAT ALKITAB RUJUKAN:
+"Segala sesuatu yang kamu lakukan, perbuatlah dengan segenap hatimu seperti untuk Tuhan dan bukan untuk manusia." (Kolose 3:23)
+
+3. RINGKASAN WARTA SINGKAT:
+Pada hari ${date}, warga GMIT Betel Fuimelang di bawah koordinasi ${coordinator} telah sukses melaksanakan kegiatan ${title} bertempat di ${location}. Kegiatan ini diikuti dengan penuh sukacita oleh ${participants} sebagai bukti nyata ketaatan iman dan kepedulian bersama terhadap rumah Tuhan dan lingkungan persekutuan.
+
+4. LIPUTAN BERITA LENGKAP:
+Di tengah kesejukan perbukitan Lembur Tengah, puluhan warga jemaat dari anak-anak, pemuda-pemudi, kaum ibu, hingga kaum bapak berkumpul sejak pagi hari untuk menyatakan bakti kasih. Dengan membawa peralatan gotong-royong seperti cangkul, parang, sapu lidi, dan kuas cat, jemaat bergotong-royong dengan penuh riang gembira.
+
+Beberapa agenda pekerjaan yang telah dituntaskan antara lain:
+- Pembersihan menyeluruh saluran drainase dan halaman gedung kebaktian guna mengantisipasi genangan air hujan.
+- Perapian rumput dan tanaman hias di pelataran pastori dan gereja.
+- Pengecatan dan perbaikan pagar gerbang utama Betel Fuimelang.
+- Aksi peduli lingkungan dan penataan tempat pembuangan sampah ramah lingkungan.
+
+Koordinator pelaksana, ${coordinator}, menyampaikan rasa syukur dan haru atas kekompakan jemaat yang meluangkan waktu di tengah kesibukan kebun dan keluarga demi kemuliaan rumah Tuhan. Kegiatan kemudian diakhiri dengan istirahat bersama, menikmati sajian ubi keladi, pisang rebus, dan teh hangat berbalut tawa persaudaraan sejati.
+
+5. TEKS FORMAT WHATSAPP SIAP SEBAR:
+🌿 *BERITA KEGIATAN & BAKTI GEREJA GMIT BETEL FUIMELANG* 🌿
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Shalom Saudara-saudari terkasih!
+
+Puji Tuhan, pada hari *${date}*, telah terlaksana kegiatan:
+📌 *${title}*
+📍 *Lokasi:* ${location}
+👥 *Peserta:* ${participants}
+🎯 *Hasil:* ${notes}
+
+_"Hendaklah terangmu bercahaya di depan orang, supaya mereka melihat perbuatanmu yang baik dan memuliakan Bapamu yang di sorga." (Matius 5:16)_
+
+Majelis Jemaat GMIT Betel Fuimelang mengucapkan limpah terima kasih atas ketulusan hati, waktu, dan tenaga seluruh warga jemaat yang telah berpartisipasi. Kiranya Tuhan Yesus memberkati ladang, kebun, keluarga, dan kesehatan kita sekalian!
+
+#BaktiGereja #GMITBetelFuimelang #GotongRoyongKristen #AlorTengahUtara
+
+6. DOA SYUKUR PENUTUP KEGIATAN:
+"Ya Bapa Yang Mahakuasa, Pemilik Kehidupan dan Pemelihara Gereja kami. Kami menaikkan syukur yang melimpah atas selesainya kegiatan ${category} pada hari ini. Terima kasih atas kesehatan, cuaca yang teduh, dan semangat persaudaraan yang Kau tanamkan di dalam hati setiap jemaat Betel Fuimelang. Berkati setiap tangan yang telah bekerja mencangkul, membersihkan, dan melayani. Kuduskanlah gedung dan lingkungan gereja ini agar senantiasa menjadi tempat di mana nama-Mu dipuji dan dimuliakan. Di dalam nama Tuhan Yesus Kristus kami berdoa dan mengucap syukur. Amin."`;
+
+  return res.json({
+    success: true,
+    text: fallback,
+    category,
+    title,
+    date,
+    location,
+    imageUrl,
+  });
+});
+

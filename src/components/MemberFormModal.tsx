@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Save, AlertCircle, Camera, Upload, Trash2, User, Image as ImageIcon } from 'lucide-react';
 import { CalendarDatePicker } from './CalendarDatePicker.tsx';
 import {
   STANDARD_EDUCATION_OPTIONS,
@@ -109,8 +109,55 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
   if (!isOpen) return null;
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleChange = (field: keyof Member, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('File yang diunggah harus berupa file gambar (JPG, PNG, atau WEBP)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          handleChange('photoUrl', compressed);
+          setError('');
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,6 +247,82 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
           {/* Tab 1: Data Diri */}
           {activeTab === 'diri' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {/* Photo Upload Card for Member ID Card */}
+              <div className="sm:col-span-2 p-4 rounded-2xl bg-[#070c1c] border border-amber-500/30 flex flex-col sm:flex-row items-center gap-4">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+
+                <div className="w-24 h-28 rounded-xl bg-slate-900 border-2 border-amber-400/50 overflow-hidden flex flex-col items-center justify-center shrink-0 shadow-lg relative group">
+                  {formData.photoUrl ? (
+                    <>
+                      <img
+                        src={formData.photoUrl}
+                        alt="Foto Anggota"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleChange('photoUrl', '')}
+                        title="Hapus Foto"
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-rose-300 transition-opacity"
+                      >
+                        <Trash2 className="w-5 h-5 mb-1 text-rose-400" />
+                        <span className="text-[10px] font-semibold">Hapus</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-center p-2 text-slate-400">
+                      <User className="w-8 h-8 mx-auto text-amber-400/60 mb-1" />
+                      <span className="text-[9px] font-medium block">Pas Foto 3x4</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 flex-1 text-center sm:text-left">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <h4 className="text-sm font-bold text-white flex items-center justify-center sm:justify-start gap-1.5">
+                      <Camera className="w-4 h-4 text-amber-400" />
+                      <span>Foto Anggota untuk Kartu Jemaat (KAJ)</span>
+                    </h4>
+                    {formData.photoUrl && (
+                      <span className="text-[10px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 self-center sm:self-auto">
+                        Foto Tersimpan
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Unggah pas foto resmi anggota (format JPG/PNG/WEBP). Foto ini akan dicetak otomatis pada Kartu Anggota Jemaat berdesain elegan.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 justify-center sm:justify-start">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{formData.photoUrl ? 'Ganti Foto' : 'Unggah Foto dari HP/PC'}</span>
+                    </button>
+
+                    {formData.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => handleChange('photoUrl', '')}
+                        className="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-rose-300 border border-red-500/40 text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Hapus</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-slate-300 mb-1">
                   Nama Lengkap (Sesuai Akta / KTP) *
