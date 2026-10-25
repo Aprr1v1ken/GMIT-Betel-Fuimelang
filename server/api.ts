@@ -450,7 +450,32 @@ apiRouter.post('/staff', (req, res) => {
     db.prepare('INSERT INTO church_staff (id, member_id, name, position, period, phone, email, status) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)')
       .run(id, data.name, data.position, data.period || '2026 - 2029', data.phone || '', data.email || '', data.status || 'Aktif');
     addAuditLog('admin', 'Admin', 'Tambah Majelis', 'Majelis & Pendeta', `Menambahkan pelayan majelis: ${data.name}`);
-    res.json({ success: true, message: 'Pelayan majelis berhasil ditambahkan' });
+    res.json({ success: true, message: 'Pelayan majelis berhasil ditambahkan', id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.put('/staff/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    db.prepare(`
+      UPDATE church_staff
+      SET name = ?, position = ?, period = ?, phone = ?, email = ?, status = ?
+      WHERE id = ?
+    `).run(
+      data.name,
+      data.position,
+      data.period || '2026 - 2029',
+      data.phone || '',
+      data.email || '',
+      data.status || 'Aktif',
+      id
+    );
+    addAuditLog('admin', 'Admin', 'Perbarui Majelis', 'Majelis & Pendeta', `Memperbarui data pelayan majelis: ${data.name} (${data.position})`);
+    res.json({ success: true, message: 'Data pelayan majelis berhasil diperbarui' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -735,7 +760,63 @@ apiRouter.post('/schedules', (req, res) => {
       data.bibleReader, data.notes || ''
     );
     addAuditLog('admin', 'Admin', 'Buat Jadwal Petugas Ibadah', 'Jadwal Pelayanan', `Membuat jadwal petugas kebaktian: ${data.serviceName} (${data.serviceDate})`);
-    res.json({ success: true, message: 'Jadwal petugas ibadah berhasil disimpan' });
+    res.json({ success: true, message: 'Jadwal petugas ibadah berhasil disimpan', id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.put('/schedules/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    db.prepare(`
+      UPDATE service_schedules
+      SET service_date = ?, service_name = ?, preacher = ?, liturgist = ?, elder_duty = ?,
+          deacon_duty = ?, song_leader = ?, musicians = ?, multimedia_operator = ?, usher = ?,
+          bible_reader = ?, notes = ?
+      WHERE id = ?
+    `).run(
+      data.serviceDate,
+      data.serviceName,
+      data.preacher || '',
+      data.liturgist || '',
+      data.elderDuty || '',
+      data.deaconDuty || '',
+      data.songLeader || '',
+      data.musicians || '',
+      data.multimediaOperator || '',
+      data.usher || '',
+      data.bibleReader || '',
+      data.notes || '',
+      id
+    );
+    addAuditLog('admin', 'Admin', 'Perbarui Jadwal Ibadah', 'Jadwal Pelayanan', `Memperbarui petugas ibadah: ${data.serviceName}`);
+    res.json({ success: true, message: 'Jadwal petugas ibadah berhasil diperbarui' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/schedules/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM service_schedules WHERE id = ?').run(id);
+    addAuditLog('admin', 'Admin', 'Hapus Jadwal Ibadah', 'Jadwal Pelayanan', `Menghapus jadwal petugas ID: ${id}`);
+    res.json({ success: true, message: 'Jadwal petugas ibadah berhasil dihapus' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/schedules', (req, res) => {
+  const db = getDb();
+  try {
+    db.prepare('DELETE FROM service_schedules').run();
+    addAuditLog('admin', 'Admin', 'Kosongkan Seluruh Jadwal', 'Jadwal Pelayanan', 'Mengosongkan seluruh jadwal petugas ibadah');
+    res.json({ success: true, message: 'Seluruh jadwal petugas ibadah berhasil dikosongkan' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -909,7 +990,44 @@ apiRouter.post('/announcements', (req, res) => {
     `).run(id, data.title, data.date || now, data.category || 'Warta Ibadah', data.content, data.author || 'Sekretariat Majelis', data.isImportant ? 1 : 0, data.imageUrl || '');
 
     addAuditLog('admin', 'Admin', 'Terbitkan Warta', 'Warta & Pengumuman', `Menerbitkan warta jemaat: ${data.title}`);
-    res.json({ success: true, message: 'Warta jemaat berhasil diterbitkan' });
+    res.json({ success: true, message: 'Warta jemaat berhasil diterbitkan', id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.put('/announcements/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    db.prepare(`
+      UPDATE announcements
+      SET title = ?, category = ?, content = ?, author = ?, is_important = ?, image_url = ?
+      WHERE id = ?
+    `).run(
+      data.title,
+      data.category || 'Warta Ibadah',
+      data.content,
+      data.author || 'Sekretariat Majelis',
+      data.isImportant ? 1 : 0,
+      data.imageUrl || '',
+      id
+    );
+    addAuditLog('admin', 'Admin', 'Perbarui Warta', 'Warta & Pengumuman', `Memperbarui warta jemaat: ${data.title}`);
+    res.json({ success: true, message: 'Warta jemaat berhasil diperbarui' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/announcements/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+    addAuditLog('admin', 'Admin', 'Hapus Warta', 'Warta & Pengumuman', `Menghapus warta jemaat ID: ${id}`);
+    res.json({ success: true, message: 'Warta jemaat berhasil dihapus' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

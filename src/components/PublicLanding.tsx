@@ -65,6 +65,8 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [wartaTheme, setWartaTheme] = useState<'rgb' | 'neon' | 'emerald'>('rgb');
+  const [selectedWartaCategory, setSelectedWartaCategory] = useState<string>('Semua');
 
   const handleInstallClick = async () => {
     if (isInstalled) return;
@@ -661,56 +663,218 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
           </div>
         </section>
 
-        {/* Warta Jemaat Terkini */}
+        {/* Warta Jemaat Terkini - RGB Chromatic Theme */}
         <section id="warta" className="space-y-6 scroll-mt-20">
-          <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
-            <div>
-              <h3 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
-                <BookOpen className="w-6 h-6 text-amber-400" />
-                <span>Warta & Pengumuman Jemaat</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Informasi resmi pelayanan dan kegiatan sepekan GMIT Betel Fuimelang
-              </p>
+          {/* Top Bar with RGB Title & Theme Switcher */}
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-[#0c1328] via-[#101a38] to-[#0c1328] border border-amber-500/30 relative overflow-hidden shadow-2xl">
+            {/* Animated RGB Ambient Light */}
+            <div
+              className={`absolute top-0 right-0 w-96 h-96 rounded-full blur-3xl pointer-events-none transition-all duration-700 ${
+                wartaTheme === 'rgb'
+                  ? 'bg-gradient-to-br from-pink-500/20 via-cyan-500/20 to-amber-500/20 animate-pulse'
+                  : wartaTheme === 'neon'
+                  ? 'bg-gradient-to-br from-purple-600/25 via-blue-500/25 to-pink-500/25'
+                  : 'bg-gradient-to-br from-emerald-500/25 via-teal-500/25 to-amber-500/25'
+              }`}
+            />
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-700 text-xs font-semibold mb-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="rgb-text-gradient font-bold">WARTA & BERITA GEREJA PUBLIK (RGB)</span>
+                </div>
+                <h3 className="text-xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2">
+                  <span>Warta Pelayanan GMIT Betel Fuimelang</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  Informasi resmi pelayanan jemaat, dokumentasi foto bakti Jumat, aksi kasih diakonia, dan kegiatan kategorial sepekan.
+                </p>
+              </div>
+
+              {/* Theme Selector Controls */}
+              <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/60 border border-slate-700 shrink-0 self-start md:self-auto backdrop-blur-md">
+                <span className="text-[10px] text-slate-400 font-bold px-2 uppercase tracking-wider">Thema:</span>
+                <button
+                  type="button"
+                  onClick={() => setWartaTheme('rgb')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    wartaTheme === 'rgb'
+                      ? 'rgb-rainbow-gradient text-slate-950 shadow-md shadow-pink-500/20 scale-105'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  🌈 RGB Chroma
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWartaTheme('neon')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    wartaTheme === 'neon'
+                      ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md shadow-purple-500/30 scale-105'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  💎 Neon Liturgis
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWartaTheme('emerald')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    wartaTheme === 'emerald'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/30 scale-105'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  🌿 Eden Emerald
+                </button>
+              </div>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t border-slate-800/80 relative z-10">
+              <span className="text-xs text-slate-400 font-medium">Filter Kategori:</span>
+              {[
+                'Semua',
+                'Bakti Jumat & Gotong Royong',
+                'Warta Ibadah',
+                'Diakonia & Kasih',
+                'Pemuda & Remaja',
+              ].map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedWartaCategory(cat)}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    selectedWartaCategory === cat
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                      : 'bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {announcements.length === 0 ? (
-              <div className="col-span-full py-12 px-6 rounded-2xl bg-[#0c1329]/50 border border-dashed border-amber-500/20 text-center space-y-3">
-                <BookOpen className="w-8 h-8 text-amber-400/50 mx-auto" />
-                <p className="text-sm text-slate-300 font-medium">
-                  Belum ada warta dan pengumuman jemaat yang diterbitkan
-                </p>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Warta ibadah dan pengumuman pelayanan jemaat dapat diinput oleh Majelis Jemaat melalui menu Warta Jemaat di dalam sistem.
-                </p>
-              </div>
-            ) : (
-              announcements.slice(0, 4).map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 space-y-2.5 hover:border-amber-400/40 transition-colors"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                      {item.category}
-                    </span>
-                    <span className="text-slate-400">{item.date}</span>
-                  </div>
-                  <h4 className="text-base font-bold text-white hover:text-amber-300 transition-colors">
-                    {item.title}
-                  </h4>
-                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
-                    {item.content}
+          {/* Announcements Card Grid */}
+          {(() => {
+            const filteredAnnouncements = announcements.filter((item) => {
+              if (selectedWartaCategory === 'Semua') return true;
+              return item.category?.toLowerCase().includes(selectedWartaCategory.toLowerCase());
+            });
+
+            if (filteredAnnouncements.length === 0) {
+              return (
+                <div className="py-16 px-6 rounded-3xl bg-[#0c1329]/60 border border-dashed border-amber-500/20 text-center space-y-3">
+                  <BookOpen className="w-10 h-10 text-amber-400/50 mx-auto" />
+                  <p className="text-sm text-slate-300 font-bold">
+                    Belum ada warta untuk kategori "{selectedWartaCategory}"
                   </p>
-                  <div className="text-[11px] text-slate-400 pt-1">
-                    Diumumkan oleh: <span className="text-slate-200">{item.author}</span>
-                  </div>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Majelis Jemaat dapat menambahkan warta baru atau membuat liputan otomatis via Asisten AI Berita & Bakti Jumat.
+                  </p>
                 </div>
-              ))
-            )}
-          </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {filteredAnnouncements.map((item) => {
+                  const isBakti = item.category?.toLowerCase().includes('bakti') || item.title?.toLowerCase().includes('bakti');
+                  const isDiakonia = item.category?.toLowerCase().includes('diakonia');
+                  const isPemuda = item.category?.toLowerCase().includes('pemuda');
+
+                  // Distinct RGB theme glowing border classes
+                  const cardBorderGlow =
+                    wartaTheme === 'rgb'
+                      ? isBakti
+                        ? 'border-emerald-400/80 shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-500/30'
+                        : isDiakonia
+                        ? 'border-rose-400/80 shadow-lg shadow-rose-500/15 ring-1 ring-rose-500/30'
+                        : isPemuda
+                        ? 'border-cyan-400/80 shadow-lg shadow-cyan-500/15 ring-1 ring-cyan-500/30'
+                        : 'border-amber-400/80 shadow-lg shadow-amber-500/15 ring-1 ring-amber-500/30'
+                      : wartaTheme === 'neon'
+                      ? 'border-purple-500/70 shadow-lg shadow-purple-500/20 ring-1 ring-purple-500/40'
+                      : 'border-emerald-500/70 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-500/40';
+
+                  const badgeStyle = isBakti
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : isDiakonia
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    : isPemuda
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+
+                  const shareText = `*WARTA GMIT BETEL FUIMELANG*\n\n📌 *${item.title}*\n🗓️ ${item.date} | ${item.category}\n\n${item.content}\n\n_Diumumkan oleh: ${item.author}_`;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-6 rounded-3xl bg-[#090f24] border ${cardBorderGlow} space-y-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 group relative overflow-hidden`}
+                    >
+                      {/* Subtle Ambient Background Gradient */}
+                      <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+
+                      <div className="space-y-3 relative z-10">
+                        {/* Photo Banner with Zoom effect */}
+                        {item.imageUrl && (
+                          <div className="w-full h-48 rounded-2xl overflow-hidden border border-slate-700/60 relative bg-slate-950">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md text-[10px] font-bold text-white border border-white/20 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                              <span>Dokumentasi Kegiatan</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={`font-bold px-2.5 py-0.5 rounded-full border text-[10px] uppercase tracking-wide ${badgeStyle}`}>
+                            {item.category}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[11px]">{item.date}</span>
+                        </div>
+
+                        <h4 className="text-base sm:text-lg font-bold text-white group-hover:text-amber-300 transition-colors leading-snug">
+                          {item.title}
+                        </h4>
+
+                        <p className="text-xs text-slate-300 leading-relaxed line-clamp-4 whitespace-pre-line font-sans">
+                          {item.content}
+                        </p>
+                      </div>
+
+                      {/* Footer Actions: Author & WhatsApp Share */}
+                      <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs relative z-10">
+                        <div className="text-[11px] text-slate-400 truncate pr-2">
+                          Oleh: <span className="text-slate-200 font-medium">{item.author}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href={`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            title="Bagikan warta ini ke WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>Bagikan</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </section>
 
         {/* PUBLIC CHRISTIAN SPIRITUAL AI SECTION */}

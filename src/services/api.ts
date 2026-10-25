@@ -114,6 +114,15 @@ export async function createStaffApi(data: Partial<ChurchStaff>) {
   return res.json();
 }
 
+export async function updateStaffApi(id: string, data: Partial<ChurchStaff>) {
+  const res = await fetch(`${API_BASE}/staff/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
 export async function deleteStaffApi(id: string) {
   const res = await fetch(`${API_BASE}/staff/${id}`, { method: 'DELETE' });
   return res.json();
@@ -184,6 +193,20 @@ export async function createEventApi(data: Partial<ChurchEvent>) {
   return res.json();
 }
 
+export async function updateEventApi(id: string, data: Partial<ChurchEvent>) {
+  const res = await fetch(`${API_BASE}/events/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function deleteEventApi(id: string) {
+  const res = await fetch(`${API_BASE}/events/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
 export async function fetchSchedulesApi() {
   const res = await fetch(`${API_BASE}/schedules`);
   return res.json();
@@ -195,6 +218,25 @@ export async function createScheduleApi(data: Partial<ServiceSchedule>) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  return res.json();
+}
+
+export async function updateScheduleApi(id: string, data: Partial<ServiceSchedule>) {
+  const res = await fetch(`${API_BASE}/schedules/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function deleteScheduleApi(id: string) {
+  const res = await fetch(`${API_BASE}/schedules/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function clearAllSchedulesApi() {
+  const res = await fetch(`${API_BASE}/schedules`, { method: 'DELETE' });
   return res.json();
 }
 
@@ -251,6 +293,20 @@ export async function createAnnouncementApi(data: Partial<Announcement>) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  return res.json();
+}
+
+export async function updateAnnouncementApi(id: string, data: Partial<Announcement>) {
+  const res = await fetch(`${API_BASE}/announcements/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function deleteAnnouncementApi(id: string) {
+  const res = await fetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
@@ -416,9 +472,12 @@ export async function generateBibleStudyApi(data: {
 }
 
 export async function generateChurchNewsApi(data: {
+  mode?: 'news' | 'agenda';
   category: string;
   title: string;
   date: string;
+  startTime?: string;
+  endTime?: string;
   location?: string;
   coordinator?: string;
   participants?: string;

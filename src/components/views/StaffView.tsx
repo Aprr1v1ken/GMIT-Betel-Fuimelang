@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Award, UserCheck, Plus, Phone, Mail, CheckCircle2, Trash2, AlertCircle } from 'lucide-react';
+import { Award, UserCheck, Plus, Phone, Mail, CheckCircle2, Trash2, Edit2, AlertCircle, X } from 'lucide-react';
 import type { ChurchStaff } from '../../types/index.ts';
 
 interface StaffViewProps {
   staff: ChurchStaff[];
   onAddStaff: (data: Partial<ChurchStaff>) => Promise<void>;
+  onUpdateStaff?: (id: string, data: Partial<ChurchStaff>) => Promise<void>;
   onDeleteStaff?: (id: string) => Promise<void>;
   onClearAllStaff?: () => Promise<void>;
 }
@@ -12,31 +13,70 @@ interface StaffViewProps {
 export const StaffView: React.FC<StaffViewProps> = ({
   staff,
   onAddStaff,
+  onUpdateStaff,
   onDeleteStaff,
   onClearAllStaff,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<ChurchStaff | null>(null);
+
+  // Form states
   const [name, setName] = useState('');
   const [position, setPosition] = useState<any>('Penatua Rayon');
   const [period, setPeriod] = useState('2026 - 2029');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'Aktif' | 'Nonaktif' | 'Cuti'>('Aktif');
   const [saving, setSaving] = useState(false);
+
+  const openAddModal = () => {
+    setEditingStaff(null);
+    setName('');
+    setPosition('Penatua Rayon');
+    setPeriod('2026 - 2029');
+    setPhone('');
+    setEmail('');
+    setStatus('Aktif');
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (s: ChurchStaff) => {
+    setEditingStaff(s);
+    setName(s.name);
+    setPosition(s.position);
+    setPeriod(s.period);
+    setPhone(s.phone || '');
+    setEmail(s.email || '');
+    setStatus(s.status as any || 'Aktif');
+    setShowAddModal(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await onAddStaff({
-        name,
-        position,
-        period,
-        phone,
-        email,
-        status: 'Aktif',
-      });
+      if (editingStaff && onUpdateStaff) {
+        await onUpdateStaff(editingStaff.id, {
+          name,
+          position,
+          period,
+          phone,
+          email,
+          status,
+        });
+      } else {
+        await onAddStaff({
+          name,
+          position,
+          period,
+          phone,
+          email,
+          status,
+        });
+      }
       setShowAddModal(false);
+      setEditingStaff(null);
       setName('');
       setPhone('');
       setEmail('');
@@ -64,7 +104,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
             <span>Presbiter Majelis Jemaat & Pendeta</span>
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Pelayan Firman dan Tata Kelola Gerejawi GMIT Betel Fuimelang Periode 2026 - 2029
+            Pelayan Firman dan Tata Kelola Gerejawi GMIT Betel Fuimelang Periode 2026 - 2029 · Akses Manajemen Super Admin
           </p>
         </div>
 
@@ -80,7 +120,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
           )}
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={openAddModal}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -104,7 +144,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
             </p>
           </div>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={openAddModal}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -116,7 +156,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
           {staff.map((s) => (
             <div
               key={s.id}
-              className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 hover:border-amber-400/40 transition-all space-y-3 flex flex-col justify-between"
+              className="p-5 rounded-2xl bg-[#0c1329] border border-amber-500/20 hover:border-amber-400/40 transition-all space-y-3 flex flex-col justify-between group"
             >
               <div>
                 <div className="flex items-center justify-between text-xs mb-2">
@@ -127,6 +167,15 @@ export const StaffView: React.FC<StaffViewProps> = ({
                     <span className="text-[10px] text-slate-400 font-mono">
                       {s.period}
                     </span>
+                    {onUpdateStaff && (
+                      <button
+                        onClick={() => openEditModal(s)}
+                        className="p-1 text-slate-400 hover:text-amber-300 transition cursor-pointer"
+                        title="Edit data pelayan ini"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {onDeleteStaff && (
                       <button
                         onClick={() => {
@@ -168,13 +217,21 @@ export const StaffView: React.FC<StaffViewProps> = ({
         </div>
       )}
 
-      {/* Add Staff Modal */}
+      {/* Add / Edit Staff Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
-            <h3 className="text-base font-bold text-amber-300">
-              Tambah Pelayan Majelis Jemaat
-            </h3>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <h3 className="text-base font-bold text-amber-300">
+                {editingStaff ? 'Edit Data Pelayan / Majelis' : 'Tambah Pelayan Majelis Jemaat'}
+              </h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
@@ -186,8 +243,8 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Contoh: Pnt. Daniel Malaipada"
-                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
+                  placeholder="Contoh: Pnt. Daniel Malaipada, S.Pd"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
                 />
               </div>
 
@@ -198,7 +255,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                 <select
                   value={position}
                   onChange={(e) => setPosition(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
                 >
                   <option value="Ketua Majelis Jemaat / Pendeta">Ketua Majelis Jemaat / Pendeta</option>
                   <option value="Pendeta Pelayan">Pendeta Pelayan</option>
@@ -208,6 +265,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   <option value="Penatua Rayon">Penatua Rayon</option>
                   <option value="Diaken Rayon">Diaken Rayon</option>
                   <option value="Pengajar / Katekis">Pengajar / Katekis</option>
+                  <option value="Pembina Remaja & PAR">Pembina Remaja & PAR</option>
                 </select>
               </div>
 
@@ -220,7 +278,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
                   placeholder="2026 - 2029"
-                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
                 />
               </div>
 
@@ -233,8 +291,36 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="0812-xxxx-xxxx"
-                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">
+                  Email (Opsional)
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="nama@gmit.or.id"
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">
+                  Status Pelayanan
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
+                >
+                  <option value="Aktif">Aktif</option>
+                  <option value="Nonaktif">Nonaktif</option>
+                  <option value="Cuti">Cuti</option>
+                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
@@ -250,7 +336,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   disabled={saving}
                   className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
                 >
-                  {saving ? 'Menyimpan...' : 'Simpan Majelis'}
+                  {saving ? 'Menyimpan...' : editingStaff ? 'Perbarui Data Majelis' : 'Simpan Majelis'}
                 </button>
               </div>
             </form>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Users,
+  User,
   Search,
   Filter,
   UserPlus,

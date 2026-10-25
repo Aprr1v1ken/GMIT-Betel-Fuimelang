@@ -118,7 +118,7 @@ export interface ChurchStaff {
   period: string;
   phone: string;
   email?: string;
-  status: 'Aktif' | 'Purna Tugas';
+  status: 'Aktif' | 'Purna Tugas' | 'Cuti' | 'Nonaktif';
 }
 
 export interface BaptismRecord {
@@ -200,6 +200,7 @@ export interface ChurchEvent {
   picName: string;
   description: string;
   status: 'Terjadwal' | 'Berlangsung' | 'Selesai' | 'Dibatalkan';
+  imageUrl?: string;
 }
 
 export interface ServiceSchedule {

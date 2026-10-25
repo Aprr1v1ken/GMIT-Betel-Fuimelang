@@ -16,6 +16,7 @@ import { ImportModal } from './components/ImportModal.tsx';
 import { PrintReportModal } from './components/PrintReportModal.tsx';
 import { KoboExportModal } from './components/KoboExportModal.tsx';
 import { WartaPdfModal } from './components/WartaPdfModal.tsx';
+import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 
 // Views
 import { DashboardView } from './components/views/DashboardView.tsx';
@@ -40,6 +41,7 @@ import { GoogleMapsView } from './components/views/GoogleMapsView.tsx';
 import { GoogleWorkspaceView } from './components/views/GoogleWorkspaceView.tsx';
 
 import * as api from './services/api.ts';
+import * as cloudSync from './services/cloud-sync.ts';
 import {
   getOfflineMembersQueue,
   addMemberToOfflineQueue,
@@ -274,6 +276,66 @@ export default function App() {
       if (announcementsRes?.announcements) setAnnouncements(announcementsRes.announcements);
       if (correctionsRes?.corrections) setCorrections(correctionsRes.corrections);
       if (auditRes?.logs) setAuditLogs(auditRes.logs);
+
+      // Real-Time Cloud Firestore Sync (Ensures Vercel & GitHub persistence across instances)
+      try {
+        const [cloudStaff, cloudSchedules, cloudAnnouncements, cloudMembers, cloudEvents] = await Promise.all([
+          cloudSync.fetchStaffFromFirestore(),
+          cloudSync.fetchSchedulesFromFirestore(),
+          cloudSync.fetchAnnouncementsFromFirestore(),
+          cloudSync.fetchMembersFromFirestore(),
+          cloudSync.fetchEventsFromFirestore(),
+        ]);
+
+        if (cloudStaff && cloudStaff.length > 0) {
+          setStaff((prev) => {
+            const map = new Map<string, ChurchStaff>();
+            (staffRes?.staff || prev || []).forEach((s: ChurchStaff) => map.set(s.id, s));
+            cloudStaff.forEach((s: ChurchStaff) => map.set(s.id, s));
+            return Array.from(map.values());
+          });
+        }
+
+        if (cloudSchedules && cloudSchedules.length > 0) {
+          setSchedules((prev) => {
+            const map = new Map<string, ServiceSchedule>();
+            (schedulesRes?.schedules || prev || []).forEach((s: ServiceSchedule) => map.set(s.id, s));
+            cloudSchedules.forEach((s: ServiceSchedule) => map.set(s.id, s));
+            return Array.from(map.values());
+          });
+        }
+
+        if (cloudAnnouncements && cloudAnnouncements.length > 0) {
+          setAnnouncements((prev) => {
+            const map = new Map<string, Announcement>();
+            (announcementsRes?.announcements || prev || []).forEach((a: Announcement) => map.set(a.id, a));
+            cloudAnnouncements.forEach((a: Announcement) => map.set(a.id, a));
+            return Array.from(map.values());
+          });
+        }
+
+        if (cloudMembers && cloudMembers.length > 0) {
+          setMembers((prev) => {
+            const map = new Map<string, Member>();
+            prev.forEach((m) => map.set(m.id, m));
+            cloudMembers.forEach((m) => map.set(m.id, m));
+            const merged = Array.from(map.values());
+            cacheMembersLocally(merged);
+            return merged;
+          });
+        }
+
+        if (cloudEvents && cloudEvents.length > 0) {
+          setEvents((prev) => {
+            const map = new Map<string, ChurchEvent>();
+            (eventsRes?.events || prev || []).forEach((e: ChurchEvent) => map.set(e.id, e));
+            cloudEvents.forEach((e: ChurchEvent) => map.set(e.id, e));
+            return Array.from(map.values());
+          });
+        }
+      } catch (cloudErr) {
+        console.warn('Firestore cloud sync optional merge:', cloudErr);
+      }
     } catch (err) {
       console.warn('Jaringan offline atau server tidak merespons, memuat dari penyimpanan lokal browser:', err);
       const cached = getCachedMembersLocally();
@@ -491,6 +553,7 @@ export default function App() {
 
   const handleDeleteMember = async (id: string) => {
     await api.deleteMemberApi(id);
+    await cloudSync.deleteMemberFromFirestore(id);
     await loadAllData();
   };
 
@@ -505,19 +568,46 @@ export default function App() {
     await loadAllData();
   };
 
-  // Staff handler
+  // Church Staff (Majelis & Pendeta & Pengajar) CRUD handlers with Firestore sync
   const handleAddStaff = async (data: Partial<ChurchStaff>) => {
-    await api.createStaffApi(data);
+    const res = await api.createStaffApi(data);
+    const newStaff: ChurchStaff = {
+      id: res.id || 'st-' + Date.now(),
+      name: data.name || '',
+      position: data.position || 'Penatua Rayon',
+      period: data.period || '2026 - 2029',
+      phone: data.phone || '',
+      email: data.email || '',
+      status: (data.status as any) || 'Aktif',
+    };
+    await cloudSync.syncStaffToFirestore(newStaff);
+    await loadAllData();
+  };
+
+  const handleUpdateStaff = async (id: string, data: Partial<ChurchStaff>) => {
+    await api.updateStaffApi(id, data);
+    const existing = staff.find((s) => s.id === id);
+    if (existing) {
+      await cloudSync.syncStaffToFirestore({
+        ...existing,
+        ...data,
+        id,
+      });
+    }
     await loadAllData();
   };
 
   const handleDeleteStaff = async (id: string) => {
     await api.deleteStaffApi(id);
+    await cloudSync.deleteStaffFromFirestore(id);
     await loadAllData();
   };
 
   const handleClearAllStaff = async () => {
     await api.clearAllStaffApi();
+    for (const s of staff) {
+      await cloudSync.deleteStaffFromFirestore(s.id);
+    }
     await loadAllData();
   };
 
@@ -541,13 +631,70 @@ export default function App() {
     await loadAllData();
   };
 
-  // Event & Schedule handlers
+  // Event & Schedule handlers with Firestore sync
   const handleAddEvent = async (data: Partial<ChurchEvent>) => {
-    await api.createEventApi(data);
+    const res = await api.createEventApi(data);
+    const newEvent: ChurchEvent = {
+      id: res?.id || 'evt-' + Date.now(),
+      title: data.title || '',
+      category: data.category || 'Lainnya',
+      startTime: data.startTime || '',
+      endTime: data.endTime || '',
+      location: data.location || '',
+      picName: data.picName || '',
+      description: data.description || '',
+      status: data.status || 'Terjadwal',
+      imageUrl: data.imageUrl || '',
+    };
+    await cloudSync.syncEventToFirestore(newEvent);
     await loadAllData();
   };
+
   const handleAddSchedule = async (data: Partial<ServiceSchedule>) => {
-    await api.createScheduleApi(data);
+    const res = await api.createScheduleApi(data);
+    const newSchedule: ServiceSchedule = {
+      id: res.id || 'sch-' + Date.now(),
+      serviceDate: data.serviceDate || '',
+      serviceName: data.serviceName || '',
+      preacher: data.preacher || '',
+      liturgist: data.liturgist || '',
+      elderDuty: data.elderDuty || '',
+      deaconDuty: data.deaconDuty || '',
+      songLeader: data.songLeader || '',
+      musicians: data.musicians || '',
+      multimediaOperator: data.multimediaOperator || '',
+      usher: data.usher || '',
+      bibleReader: data.bibleReader || '',
+      notes: data.notes || '',
+    };
+    await cloudSync.syncScheduleToFirestore(newSchedule);
+    await loadAllData();
+  };
+
+  const handleUpdateSchedule = async (id: string, data: Partial<ServiceSchedule>) => {
+    await api.updateScheduleApi(id, data);
+    const existing = schedules.find((s) => s.id === id);
+    if (existing) {
+      await cloudSync.syncScheduleToFirestore({
+        ...existing,
+        ...data,
+        id,
+      });
+    }
+    await loadAllData();
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    await api.deleteScheduleApi(id);
+    await cloudSync.deleteScheduleFromFirestore(id);
+    await loadAllData();
+  };
+
+  const handleClearAllSchedules = async () => {
+    await api.clearAllSchedulesApi();
+    for (const sch of schedules) {
+      await cloudSync.deleteScheduleFromFirestore(sch.id);
+    }
     await loadAllData();
   };
 
@@ -569,9 +716,39 @@ export default function App() {
     await loadAllData();
   };
 
-  // Announcement handler
+  // Announcement (Warta Jemaat) handlers with Firestore sync
   const handleAddAnnouncement = async (data: Partial<Announcement>) => {
-    await api.createAnnouncementApi(data);
+    const res = await api.createAnnouncementApi(data);
+    const newAn: Announcement = {
+      id: res.id || 'an-' + Date.now(),
+      title: data.title || '',
+      date: data.date || new Date().toISOString().substring(0, 10),
+      category: data.category || 'Warta Ibadah',
+      content: data.content || '',
+      author: data.author || 'Sekretariat Majelis',
+      isImportant: data.isImportant || false,
+      imageUrl: data.imageUrl || '',
+    };
+    await cloudSync.syncAnnouncementToFirestore(newAn);
+    await loadAllData();
+  };
+
+  const handleUpdateAnnouncement = async (id: string, data: Partial<Announcement>) => {
+    await api.updateAnnouncementApi(id, data);
+    const existing = announcements.find((a) => a.id === id);
+    if (existing) {
+      await cloudSync.syncAnnouncementToFirestore({
+        ...existing,
+        ...data,
+        id,
+      });
+    }
+    await loadAllData();
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    await api.deleteAnnouncementApi(id);
+    await cloudSync.deleteAnnouncementFromFirestore(id);
     await loadAllData();
   };
 
@@ -739,6 +916,7 @@ export default function App() {
               rayons={rayons}
               stats={stats}
               onAddAnnouncement={handleAddAnnouncement}
+              onAddEvent={handleAddEvent}
               initialTab={aiActiveTab as any}
             />
           )}
@@ -822,6 +1000,7 @@ export default function App() {
             <StaffView
               staff={staff}
               onAddStaff={handleAddStaff}
+              onUpdateStaff={handleUpdateStaff}
               onDeleteStaff={handleDeleteStaff}
               onClearAllStaff={handleClearAllStaff}
             />
@@ -867,6 +1046,13 @@ export default function App() {
               schedules={schedules}
               onAddEvent={handleAddEvent}
               onAddSchedule={handleAddSchedule}
+              onUpdateSchedule={handleUpdateSchedule}
+              onDeleteSchedule={handleDeleteSchedule}
+              onClearAllSchedules={handleClearAllSchedules}
+              onOpenAIAgendaGenerator={() => {
+                setAiActiveTab('church-news');
+                setCurrentView('ai-assistant');
+              }}
             />
           )}
 
@@ -903,6 +1089,8 @@ export default function App() {
             <AnnouncementsView
               announcements={announcements}
               onAddAnnouncement={handleAddAnnouncement}
+              onUpdateAnnouncement={handleUpdateAnnouncement}
+              onDeleteAnnouncement={handleDeleteAnnouncement}
             />
           )}
 
@@ -1062,6 +1250,9 @@ export default function App() {
           </button>
         </div>
       )}
+
+      {/* Network & Offline Status Banner */}
+      <OfflineIndicator />
     </div>
   );
 }

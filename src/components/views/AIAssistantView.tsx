@@ -28,8 +28,14 @@ import {
   MessageSquare,
   Music,
   Flame,
+  Newspaper,
+  Image as ImageIcon,
+  Upload,
+  Cloud,
+  CalendarPlus,
+  CheckCheck,
 } from 'lucide-react';
-import type { Member, Rayon } from '../../types/index.ts';
+import type { Member, Rayon, ChurchEvent } from '../../types/index.ts';
 import {
   generateSermonApi,
   generateWartaApi,
@@ -40,17 +46,25 @@ import {
   generateLiturgyOrderApi,
   generateSundaySchoolApi,
   generateBibleStudyApi,
+  generateChurchNewsApi,
 } from '../../services/api.ts';
+import {
+  uploadActivityImageToCloud,
+  fetchActivityImagesFromCloud,
+  type CloudActivityImage,
+} from '../../services/cloud-sync.ts';
 
 interface AIAssistantViewProps {
   members: Member[];
   rayons: Rayon[];
   stats: any;
   onAddAnnouncement?: (data: any) => Promise<void>;
+  onAddEvent?: (data: Partial<ChurchEvent>) => Promise<void>;
   initialTab?: AITabType;
 }
 
 export type AITabType =
+  | 'church-news'
   | 'counseling'
   | 'devotional'
   | 'liturgy'
@@ -67,6 +81,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   rayons,
   stats,
   onAddAnnouncement,
+  onAddEvent,
   initialTab,
 }) => {
   const [activeTab, setActiveTab] = useState<AITabType>(initialTab || 'counseling');
@@ -80,6 +95,37 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [savedToWarta, setSavedToWarta] = useState(false);
+
+  // Tab 0 / Tab 11: AI Berita & Agenda Kegiatan Gereja (Dual Mode)
+  const [newsMode, setNewsMode] = useState<'news' | 'agenda'>('news');
+  const [newsCategory, setNewsCategory] = useState('Bakti Jumat & Gotong Royong');
+  const [newsTitle, setNewsTitle] = useState('Aksi Bakti Bersih Lingkungan Gereja dan Penataan Pekarangan');
+  const [newsDate, setNewsDate] = useState(new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-'));
+  const [newsStartTime, setNewsStartTime] = useState('07:30');
+  const [newsEndTime, setNewsEndTime] = useState('11:30');
+  const [newsLocation, setNewsLocation] = useState('Kompleks Gedung Gereja Betel Fuimelang & Pastori');
+  const [newsCoordinator, setNewsCoordinator] = useState('BPPJ & Seksi Pembangunan Pemuda');
+  const [newsParticipants, setNewsParticipants] = useState('Presbiter, Pemuda GMIT, dan Seluruh Anggota Rayon 1 - 4');
+  const [newsNotes, setNewsNotes] = useState('Pembersihan selokan air jelang musim hujan, perbaikan pagar bambu, penanaman bunga pekarangan gereja, dan ditutup dengan perjamuan kasih ubi rebus dan kopi jahe Alor.');
+  const [newsImageUrl, setNewsImageUrl] = useState('/src/assets/images/regenerated_image_1792335390161.png');
+  const [newsResult, setNewsResult] = useState('');
+  const [savedNewsToWarta, setSavedNewsToWarta] = useState(false);
+  const [savedAgendaToCalendar, setSavedAgendaToCalendar] = useState(false);
+  const [cloudUploading, setCloudUploading] = useState(false);
+  const [cloudSavedImageId, setCloudSavedImageId] = useState('');
+  const [recentCloudImages, setRecentCloudImages] = useState<CloudActivityImage[]>([]);
+  const [showCloudGallery, setShowCloudGallery] = useState(false);
+
+  // Fetch recent activity images from Cloud Firestore
+  useEffect(() => {
+    fetchActivityImagesFromCloud()
+      .then((imgs) => {
+        if (imgs && imgs.length > 0) {
+          setRecentCloudImages(imgs);
+        }
+      })
+      .catch((err) => console.warn('Could not load cloud images:', err));
+  }, []);
 
   // Tab 1: AI Konseling & Bimbingan Iman Rohani
   const [counselingCategory, setCounselingCategory] = useState('pergumulan-hidup');
@@ -196,6 +242,140 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     if (!text) return;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
+  };
+
+  // 11. Generate Church News & Agenda Kegiatan Gereja (Gemini AI)
+  const handleGenerateChurchNews = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await generateChurchNewsApi({
+        mode: newsMode,
+        category: newsCategory,
+        title: newsTitle,
+        date: newsDate,
+        startTime: newsStartTime,
+        endTime: newsEndTime,
+        location: newsLocation,
+        coordinator: newsCoordinator,
+        participants: newsParticipants,
+        notes: newsNotes,
+        imageUrl: newsImageUrl,
+      });
+      if (res.success && res.text) {
+        setNewsResult(res.text);
+      } else {
+        setErrorMsg(res.message || 'Gagal menghasilkan berita/agenda gereja.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Koneksi ke asisten AI gagal.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNewsImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCloudUploading(true);
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const maxW = 800;
+        const maxH = 600;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxW || h > maxH) {
+          if (w > h) {
+            h = Math.round((h * maxW) / w);
+            w = maxW;
+          } else {
+            w = Math.round((w * maxH) / h);
+            h = maxH;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          setNewsImageUrl(compressed);
+
+          // Direct Cloud Firestore write to 'activity_images' collection
+          try {
+            const record = await uploadActivityImageToCloud(compressed, {
+              title: newsTitle || (newsMode === 'agenda' ? 'Dokumentasi Agenda Kegiatan' : 'Dokumentasi Berita Kegiatan'),
+              category: newsCategory,
+              description: newsNotes,
+            });
+            setCloudSavedImageId(record.id);
+            setRecentCloudImages((prev) => [record, ...prev]);
+          } catch (cloudErr) {
+            console.warn('[Cloud] Warning uploading activity image:', cloudErr);
+          }
+        }
+        setCloudUploading(false);
+      };
+      if (readerEvent.target?.result) {
+        img.src = readerEvent.target.result as string;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveNewsToAnnouncements = async () => {
+    if (!newsResult || !onAddAnnouncement) return;
+    setLoading(true);
+    try {
+      await onAddAnnouncement({
+        title: newsTitle,
+        category: newsCategory,
+        content: newsResult,
+        imageUrl: newsImageUrl,
+        isImportant: true,
+        author: newsCoordinator || 'Sekretariat Majelis',
+      });
+      setSavedNewsToWarta(true);
+      setTimeout(() => setSavedNewsToWarta(false), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal menerbitkan warta berita ke sistem.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveAgendaToCalendar = async () => {
+    if (!newsResult || !onAddEvent) return;
+    setLoading(true);
+    try {
+      let mappedCategory: any = 'Lainnya';
+      if (newsCategory.includes('Bakti')) mappedCategory = 'Pelayanan Diakonia';
+      else if (newsCategory.includes('Minggu') || newsCategory.includes('Ibadah')) mappedCategory = 'Ibadah Minggu';
+      else if (newsCategory.includes('Diakonia')) mappedCategory = 'Pelayanan Diakonia';
+      else if (newsCategory.includes('Pemuda') || newsCategory.includes('Remaja') || newsCategory.includes('Perempuan') || newsCategory.includes('Bapak')) mappedCategory = 'Ibadah Kategorial';
+      else if (newsCategory.includes('Sekolah')) mappedCategory = 'Ibadah Kategorial';
+
+      await onAddEvent({
+        title: newsTitle,
+        category: mappedCategory,
+        startTime: `${newsDate} ${newsStartTime}:00`,
+        endTime: `${newsDate} ${newsEndTime}:00`,
+        location: newsLocation,
+        picName: newsCoordinator || 'Majelis GMIT Betel Fuimelang',
+        description: newsResult,
+        status: 'Terjadwal',
+        imageUrl: newsImageUrl,
+      });
+      setSavedAgendaToCalendar(true);
+      setTimeout(() => setSavedAgendaToCalendar(false), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal menyimpan agenda kegiatan ke kalender.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 1. Generate Spiritual Counseling
@@ -468,11 +648,29 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
             <Flame className="w-3.5 h-3.5" />
             Pilih Modul AI Rohani & Pastoral
           </span>
-          <span className="text-[10px] text-slate-400">Total 10 Modul Siap Pakai</span>
+          <span className="text-[10px] text-slate-400">Total 11 Modul Siap Pakai</span>
         </div>
 
         {/* Tab Buttons Grid / Scrollable Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pb-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pb-1">
+          {/* 0. Berita & Bakti Jumat */}
+          <button
+            onClick={() => setActiveTab('church-news')}
+            className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition cursor-pointer ${
+              activeTab === 'church-news'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold border-emerald-300 shadow-md shadow-emerald-500/30'
+                : 'bg-[#0b1226] text-slate-300 hover:text-white hover:bg-slate-800/80 border-slate-800'
+            }`}
+          >
+            <div className={`p-1.5 rounded-lg shrink-0 ${activeTab === 'church-news' ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-500/10 text-emerald-400'}`}>
+              <Newspaper className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold block truncate">Berita & Bakti Jumat</span>
+              <span className={`text-[10px] block truncate ${activeTab === 'church-news' ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>Auto-Generate + Foto</span>
+            </div>
+          </button>
+
           {/* 1. Konseling Rohani */}
           <button
             onClick={() => setActiveTab('counseling')}
@@ -669,6 +867,483 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* TAB 0: AI PEMBUAT BERITA & AGENDA KEGIATAN GEREJA */}
+      {/* ==================================================== */}
+      {activeTab === 'church-news' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 space-y-4">
+            <div className="p-5 rounded-2xl bg-[#0b1226] border border-emerald-500/30 space-y-4 shadow-lg shadow-emerald-950/20">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                    {newsMode === 'news' ? <Newspaper className="w-5 h-5" /> : <CalendarPlus className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-sm">
+                      {newsMode === 'news' ? 'AI Berita Gereja & Bakti Jumat' : 'AI Agenda & Rundown Kegiatan'}
+                    </h3>
+                    <p className="text-[10px] text-slate-400">Klasis Alor Tengah Utara · GMIT Betel Fuimelang</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1">
+                    <Cloud className="w-3 h-3 text-emerald-400" />
+                    <span>Cloud Sync</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Mode Switcher: Berita vs Agenda Kegiatan */}
+              <div className="p-1 rounded-xl bg-[#050811] border border-slate-800 grid grid-cols-2 gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewsMode('news');
+                    setNewsTitle('Aksi Bakti Bersih Lingkungan Gereja dan Penataan Pekarangan');
+                    setNewsNotes('Pembersihan selokan air jelang musim hujan, perbaikan pagar bambu, penanaman bunga pekarangan gereja, dan ditutup dengan perjamuan kasih ubi rebus dan kopi jahe Alor.');
+                  }}
+                  className={`py-2 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    newsMode === 'news'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Newspaper className="w-3.5 h-3.5" />
+                  <span>📰 Berita / Warta</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewsMode('agenda');
+                    setNewsTitle('Ibadah Padang & Persekutuan Kategorial Pemuda GMIT Betel Fuimelang');
+                    setNewsNotes('Bawa Alkitab, alat tulis, bekal ubi/jagung rebus bersama, dan pakaian sopan lapangan.');
+                  }}
+                  className={`py-2 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    newsMode === 'agenda'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" />
+                  <span>📅 Agenda Kegiatan</span>
+                </button>
+              </div>
+
+              {/* Quick Preset Buttons tailored by Mode */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Pilihan Topik Cepat ({newsMode === 'news' ? 'Liputan Berita' : 'Rundown Agenda'}):
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {newsMode === 'news'
+                    ? [
+                        { label: 'Bakti Bersih Lingkungan', cat: 'Bakti Jumat & Gotong Royong', title: 'Aksi Bersih Lingkungan Gereja & Penataan Pekarangan Betel', notes: 'Pembersihan saluran air selokan, pengecatan pagar, pemangkasan dahan pohon, ditutup jamuan ubi rebus bersama.' },
+                        { label: 'Diakonia Kasih Lansia', cat: 'Diakonia & Kasih', title: 'Pelayanan Diakonia Kasih Bagi Lansia & Janda Duda Fuimelang', notes: 'Pemberian paket sembako beras gula minyak dan doa berkat lawatan pastoral di rumah-rumah warga sepuh.' },
+                        { label: 'Gotong Royong Pembangunan', cat: 'Bakti Jumat & Gotong Royong', title: 'Gotong Royong Angkat Pasir & Pengecoran Pondasi Pastori', notes: 'Kerja bakti bersama Kaum Bapak dan Pemuda mengangkut material batu pasir untuk kelanjutan renovasi gereja.' },
+                        { label: 'Ibadah Padang Pemuda', cat: 'Pemuda & Remaja', title: 'Ibadah Padang & Persekutuan Kreatif Pemuda GMIT Betel', notes: 'Penyalaan api unggun persekutuan, pujian akustik, renungan alam terbuka, dan penanaman pohon buah di Fuimelang.' },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setNewsCategory(preset.cat);
+                            setNewsTitle(preset.title);
+                            setNewsNotes(preset.notes);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-900/40 text-[11px] text-slate-300 hover:text-emerald-300 border border-slate-700 transition cursor-pointer"
+                        >
+                          {preset.label}
+                        </button>
+                      ))
+                    : [
+                        { label: 'Rundown Ibadah Padang', cat: 'Pemuda & Remaja', title: 'Ibadah Padang & Persekutuan Pemuda GMIT Betel', startTime: '07:30', endTime: '13:00', notes: 'Ibadah alam terbuka, games keakraban kristiani, penanaman pohon peneduh, santap kasih persaudaraan.' },
+                        { label: 'Agenda Bakti Jumat', cat: 'Bakti Jumat & Gotong Royong', title: 'Kerja Bakti Jumat Bersih Selokan & Halaman Gedung Gereja', startTime: '07:00', endTime: '11:00', notes: 'Seluruh warga Rayon 1-4 wajib bawa cangkul, parang, sapu lidi, dan karung sampah.' },
+                        { label: 'Rapat Majelis Jemaat', cat: 'Warta Ibadah', title: 'Sidang Pleno Majelis Jemaat Evaluasi Triwulan Betel Fuimelang', startTime: '16:00', endTime: '19:30', notes: 'Evaluasi program pelayanan rayon, administrasi jemaat, dan penetapan panitia paskah/natal.' },
+                        { label: 'Katekisasi Sidi Baru', cat: 'Sekolah Minggu & PAR', title: 'Pertemuan Perdana Katekisasi Sidi Angkatan 2026/2027', startTime: '15:00', endTime: '17:00', notes: 'Pembagian kurikulum pengajaran iman GMIT dan perkenalan pendeta pengajar.' },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setNewsCategory(preset.cat);
+                            setNewsTitle(preset.title);
+                            setNewsNotes(preset.notes);
+                            if (preset.startTime) setNewsStartTime(preset.startTime);
+                            if (preset.endTime) setNewsEndTime(preset.endTime);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-900/40 text-[11px] text-slate-300 hover:text-emerald-300 border border-slate-700 transition cursor-pointer"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                </div>
+              </div>
+
+              {/* Form Inputs */}
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Kategori Kegiatan *</label>
+                  <select
+                    value={newsCategory}
+                    onChange={(e) => setNewsCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400"
+                  >
+                    <option value="Bakti Jumat & Gotong Royong">Bakti Jumat & Gotong Royong</option>
+                    <option value="Warta Ibadah">Warta Ibadah & Kebaktian</option>
+                    <option value="Diakonia & Kasih">Diakonia & Kasih Sesama</option>
+                    <option value="Pemuda & Remaja">Pemuda & Remaja GMIT</option>
+                    <option value="Sekolah Minggu & PAR">Sekolah Minggu & PAR</option>
+                    <option value="Kaum Perempuan (PKP)">Kaum Perempuan (PKP)</option>
+                    <option value="Kaum Bapak (PKB)">Kaum Bapak (PKB)</option>
+                    <option value="Pembangunan & Perbendaharaan">Pembangunan & Sarana Gedung</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">
+                    {newsMode === 'news' ? 'Judul Berita / Aksi Pelayanan *' : 'Nama Agenda / Tema Acara *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newsTitle}
+                    onChange={(e) => setNewsTitle(e.target.value)}
+                    placeholder={newsMode === 'news' ? 'Contoh: Aksi Bakti Bersih Selokan & Penataan Pekarangan' : 'Contoh: Ibadah Padang & Persekutuan Kreatif Pemuda'}
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400 font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Hari & Tanggal</label>
+                    <input
+                      type="text"
+                      value={newsDate}
+                      onChange={(e) => setNewsDate(e.target.value)}
+                      placeholder="DD-MM-YYYY"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-300 mb-1">Koordinator / Penanggung Jawab</label>
+                    <input
+                      type="text"
+                      value={newsCoordinator}
+                      onChange={(e) => setNewsCoordinator(e.target.value)}
+                      placeholder="BPPJ / Seksi Pemuda"
+                      className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Additional Time Inputs for Agenda Mode */}
+                {newsMode === 'agenda' && (
+                  <div className="grid grid-cols-2 gap-3 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <div>
+                      <label className="block font-semibold text-amber-300 mb-1">Jam Mulai (WITA)</label>
+                      <input
+                        type="text"
+                        value={newsStartTime}
+                        onChange={(e) => setNewsStartTime(e.target.value)}
+                        placeholder="07:30"
+                        className="w-full px-3 py-1.5 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-amber-300 mb-1">Jam Selesai (WITA)</label>
+                      <input
+                        type="text"
+                        value={newsEndTime}
+                        onChange={(e) => setNewsEndTime(e.target.value)}
+                        placeholder="11:30"
+                        className="w-full px-3 py-1.5 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Lokasi Kegiatan</label>
+                  <input
+                    type="text"
+                    value={newsLocation}
+                    onChange={(e) => setNewsLocation(e.target.value)}
+                    placeholder="Kompleks Gedung Gereja Betel Fuimelang"
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">
+                    {newsMode === 'news' ? 'Unsur Peserta yang Terlibat' : 'Sasaran Peserta Jemaat'}
+                  </label>
+                  <input
+                    type="text"
+                    value={newsParticipants}
+                    onChange={(e) => setNewsParticipants(e.target.value)}
+                    placeholder="Presbiter, Pemuda, dan Seluruh Anggota Rayon 1 - 4"
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">
+                    {newsMode === 'news' ? 'Poin-poin Hasil / Suasana Lapangan' : 'Perlengkapan & Catatan Khusus'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={newsNotes}
+                    onChange={(e) => setNewsNotes(e.target.value)}
+                    placeholder={
+                      newsMode === 'news'
+                        ? 'Jelaskan hal-hal yang dilakukan, suasana kekeluargaan, hidangan ubi/teh...'
+                        : 'Daftar alat yang harus dibawa peserta, susunan pembagian seksi, konsumsi...'
+                    }
+                    className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-emerald-400 resize-none leading-relaxed"
+                  />
+                </div>
+
+                {/* Upload Foto Kegiatan - Langsung Tersimpan di Cloud Firestore */}
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-emerald-400" />
+                      <span>Foto Kegiatan (Tersimpan di Cloud)</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {recentCloudImages.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCloudGallery(!showCloudGallery)}
+                          className="text-[10px] text-amber-300 hover:text-amber-200 underline cursor-pointer"
+                        >
+                          {showCloudGallery ? 'Tutup Galeri' : `Galeri Cloud (${recentCloudImages.length})`}
+                        </button>
+                      )}
+                      {newsImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewsImageUrl('');
+                            setCloudSavedImageId('');
+                          }}
+                          className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                        >
+                          Hapus Foto
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cloud Synced Notification Badge */}
+                  {cloudSavedImageId && (
+                    <div className="p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/30 flex items-center justify-between text-[11px] text-emerald-300">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>🟢 Tersimpan Langsung di Cloud Firestore</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400 truncate max-w-[100px]">
+                        ID: {cloudSavedImageId}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Cloud Gallery Quick Picker */}
+                  {showCloudGallery && recentCloudImages.length > 0 && (
+                    <div className="p-2.5 rounded-lg bg-[#050811] border border-amber-500/30 space-y-2">
+                      <span className="text-[10px] font-bold text-amber-300 block">
+                        Pilih Dari Foto Dokumentasi Cloud:
+                      </span>
+                      <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                        {recentCloudImages.map((img) => (
+                          <div
+                            key={img.id}
+                            onClick={() => {
+                              setNewsImageUrl(img.url);
+                              setCloudSavedImageId(img.id);
+                              setShowCloudGallery(false);
+                            }}
+                            className="aspect-square rounded-lg overflow-hidden border border-slate-700 hover:border-emerald-400 cursor-pointer relative group transition"
+                          >
+                            <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[9px] text-white text-center p-1">
+                              Pilih
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {newsImageUrl ? (
+                    <div className="w-full h-36 rounded-lg overflow-hidden border border-slate-700 relative group">
+                      <img
+                        src={newsImageUrl}
+                        alt="Dokumentasi Kegiatan"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold cursor-pointer transition">
+                        <span>Ganti Foto (Otomatis Upload ke Cloud)</span>
+                        <input type="file" accept="image/*" onChange={handleNewsImageUpload} className="hidden" />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-2 p-3.5 border border-dashed border-slate-700 rounded-lg hover:border-emerald-400/50 cursor-pointer text-slate-400 hover:text-white transition">
+                      <Upload className="w-4 h-4 text-emerald-400" />
+                      <span>{cloudUploading ? 'Mengompresi & Menyimpan ke Cloud...' : 'Unggah Foto Baru dari HP / Laptop'}</span>
+                      <input type="file" accept="image/*" onChange={handleNewsImageUpload} className="hidden" />
+                    </label>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateChurchNews}
+                  disabled={loading || !newsTitle.trim()}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950" />
+                  <span>
+                    {loading
+                      ? 'AI Sedang Menyusun Naskah...'
+                      : newsMode === 'news'
+                      ? 'Hasilkan Berita dengan AI (Gemini)'
+                      : 'Hasilkan Agenda & Rundown dengan AI (Gemini)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Result Preview & Actions */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="p-6 rounded-2xl bg-[#0b1226] border border-slate-800 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                    {newsMode === 'news' ? <FileText className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-sm">
+                      {newsMode === 'news' ? 'Hasil Liputan Berita & Warta Publik' : 'Hasil Agenda & Rundown Pelayanan'}
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      {newsMode === 'news' ? 'Format Resmi Jemaat & Siap Siar WhatsApp' : 'Rundown Lengkap & Format Undangan Jemaat'}
+                    </p>
+                  </div>
+                </div>
+
+                {newsResult && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Action 1: Terbitkan ke Warta Publik */}
+                    <button
+                      onClick={handleSaveNewsToAnnouncements}
+                      disabled={loading || savedNewsToWarta}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                      title="Terbitkan ke Warta Publik dan Cloud Firestore"
+                    >
+                      {savedNewsToWarta ? <Check className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                      <span>{savedNewsToWarta ? 'Telah Diterbitkan!' : 'Terbitkan ke Warta (Cloud)'}</span>
+                    </button>
+
+                    {/* Action 2: Jadwalkan ke Kalender Kegiatan (Cloud) */}
+                    {onAddEvent && (
+                      <button
+                        onClick={handleSaveAgendaToCalendar}
+                        disabled={loading || savedAgendaToCalendar}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                        title="Simpan langsung ke Kalender Kegiatan dan Cloud Firestore"
+                      >
+                        {savedAgendaToCalendar ? <CheckCheck className="w-3.5 h-3.5" /> : <CalendarPlus className="w-3.5 h-3.5" />}
+                        <span>{savedAgendaToCalendar ? 'Terjadwal di Kalender!' : 'Simpan ke Kalender (Cloud)'}</span>
+                      </button>
+                    )}
+
+                    {/* Action 3: Salin Format WA */}
+                    <button
+                      onClick={() => copyToClipboard(newsResult)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                    >
+                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                      <span>{copied ? 'Tersalin' : 'Salin Format WA'}</span>
+                    </button>
+
+                    {/* Action 4: Share ke WhatsApp */}
+                    <button
+                      onClick={() => shareToWhatsApp(newsResult)}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>WA</span>
+                    </button>
+
+                    {/* Action 5: Cetak Naskah */}
+                    <button
+                      onClick={() => window.print()}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Cetak</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Display Area */}
+              {newsResult ? (
+                <div className="space-y-4">
+                  {/* Photo Preview if attached with Cloud badge */}
+                  {newsImageUrl && (
+                    <div className="w-full h-56 rounded-2xl overflow-hidden border border-emerald-500/30 relative shadow-xl">
+                      <img
+                        src={newsImageUrl}
+                        alt="Foto Kegiatan"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-[10px] font-bold text-emerald-300 border border-emerald-400/40 flex items-center gap-1.5 shadow-md">
+                        <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Dokumentasi Cloud Firestore</span>
+                      </div>
+                      <div className="absolute bottom-0 inset-x-0 p-3.5 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between text-xs text-slate-200">
+                        <span className="font-semibold text-emerald-300">{newsTitle}</span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {newsDate} {newsMode === 'agenda' && `· ${newsStartTime}-${newsEndTime} WITA`}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-5 rounded-2xl bg-[#070b18] border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-line space-y-2 select-text">
+                    {newsResult}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-20 flex flex-col items-center justify-center text-center text-slate-500 space-y-3">
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                    {newsMode === 'news' ? <Newspaper className="w-8 h-8" /> : <CalendarPlus className="w-8 h-8" />}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-slate-300">
+                      {newsMode === 'news'
+                        ? 'Belum Ada Berita yang Dihasilkan'
+                        : 'Belum Ada Agenda Kegiatan yang Disusun'}
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {newsMode === 'news'
+                        ? 'Pilih kategori kegiatan seperti Bakti Jumat, Diakonia, atau Gotong Royong di panel kiri, lampirkan foto kegiatan, lalu klik "Hasilkan Berita dengan AI".'
+                        : 'Masukkan nama acara, waktu mulai-selesai, lokasi, dan sasaran jemaat di panel kiri, lalu klik "Hasilkan Agenda & Rundown dengan AI".'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

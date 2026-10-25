@@ -32,9 +32,36 @@
   }
 }
 
+@keyframes rgbBorderRotate {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    filter: hue-rotate(360deg);
+  }
+}
+
 .animate-rgb-glow {
   background-size: 200% 200%;
   animation: rgbGlow 6s ease infinite;
+}
+
+.animate-rgb-border {
+  animation: rgbBorderRotate 8s linear infinite;
+}
+
+.rgb-rainbow-gradient {
+  background: linear-gradient(135deg, #ff007f, #7928ca, #0070f3, #00dfd8, #00ff87, #ffcc00, #ff007f);
+  background-size: 300% 300%;
+  animation: rgbGlow 8s ease infinite;
+}
+
+.rgb-text-gradient {
+  background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc, #f472b6, #fb923c, #4ade80, #38bdf8);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rgbGlow 5s linear infinite;
 }
 
 /* Media Print Rules - Clean, crisp, high-contrast printing for ID Cards and Reports */
