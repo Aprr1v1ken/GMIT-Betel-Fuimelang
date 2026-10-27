@@ -33,12 +33,24 @@ export function persistenceMode(): 'postgres-snapshot' | 'local-sqlite' {
 
 function getPool(): Pool {
   if (!pool) {
+    // pg v8.23+ interprets sslmode=require as verify-full. Supabase's
+    // pooler certificate chain is not always usable with that mode in a
+    // serverless runtime; remove only the mode flag and explicitly retain TLS
+    // with the standard Supabase serverless compatibility setting.
+    let connectionString = process.env.POSTGRES_URL || '';
+    try {
+      const parsed = new URL(connectionString);
+      parsed.searchParams.delete('sslmode');
+      connectionString = parsed.toString();
+    } catch {
+      // Let pg report an invalid connection string in its normal error path.
+    }
     pool = new Pool({
-      connectionString: process.env.POSTGRES_URL,
+      connectionString,
       max: 1,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 8_000,
-      ssl: process.env.POSTGRES_URL?.includes('sslmode=') ? undefined : { rejectUnauthorized: false },
+      ssl: { rejectUnauthorized: false },
     });
   }
   return pool;
