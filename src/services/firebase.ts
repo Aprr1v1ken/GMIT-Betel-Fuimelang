@@ -1,5 +1,5 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from '@firebase/app';
+import { getAuth, GoogleAuthProvider } from '@firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Firebase is used only for Google authentication. Church records and images
