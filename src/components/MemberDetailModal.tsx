@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { calculateAge, formatDateDMY } from '../utils/church-logic.ts';
 import type { Member, CardColorThemeId } from '../types/index.ts';
-import { uploadMemberPhotoToFirebase } from '../services/storage.ts';
+import { uploadMemberPhoto } from '../services/storage.ts';
 
 interface MemberDetailModalProps {
   isOpen: boolean;
@@ -182,10 +182,10 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
     }
 
     setUploadingPhoto(true);
-    setUploadToast('⏳ Sedang memproses dan mengunggah foto ke Firebase Storage...');
+    setUploadToast('⏳ Sedang memproses dan menyimpan foto jemaat...');
 
     try {
-      const uploadRes = await uploadMemberPhotoToFirebase(file, member.id || member.memberNo);
+      const uploadRes = await uploadMemberPhoto(file, member.id || member.memberNo);
       setCurrentPhoto(uploadRes.url);
       setUploadSource(uploadRes.source);
 
@@ -194,9 +194,11 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
       }
 
       setUploadToast(
-        uploadRes.source === 'firebase_storage'
-          ? '🟢 Foto berhasil diunggah ke Firebase Storage & tersimpan pada Kartu Jemaat!'
-          : '🟢 Foto jemaat berhasil disimpan di cloud & siap dicetak!'
+        uploadRes.source === 'device_queue'
+          ? '🟡 Foto tersimpan pada perangkat dan kartu jemaat; sinkronisasi akan diulang saat online.'
+          : uploadRes.source === 'cloud_server'
+            ? '🟢 Foto jemaat berhasil disimpan di database dan siap dicetak pada kartu.'
+            : '🟡 Foto terpasang pada data jemaat; pastikan data ikut tersimpan ke server.'
       );
       setTimeout(() => setUploadToast(null), 4500);
     } catch (err: any) {

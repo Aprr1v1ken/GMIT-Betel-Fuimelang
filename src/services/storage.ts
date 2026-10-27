@@ -1,5 +1,3 @@
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
-import { storage } from './firebase.ts';
 import { uploadActivityImageToCloud } from './cloud-sync.ts';
 
 /**
@@ -57,56 +55,40 @@ export async function compressMemberPhoto(file: File): Promise<string> {
 
 export interface UploadMemberPhotoResult {
   url: string;
-  source: 'firebase_storage' | 'cloud_server' | 'compressed_data';
+  source: 'cloud_server' | 'device_queue' | 'compressed_data';
   storagePath?: string;
 }
 
 /**
- * Uploads member photo to Firebase Storage and returns public URL.
- * Automatically handles fallbacks so photo upload NEVER breaks.
+ * Compress and save a member photo through the authenticated API. Offline
+ * uploads stay in the bounded device gallery and are retried on reconnection.
  */
-export async function uploadMemberPhotoToFirebase(
+export async function uploadMemberPhoto(
   file: File,
   memberIdOrName?: string
 ): Promise<UploadMemberPhotoResult> {
-  // 1. First compress the photo
   const compressedDataUrl = await compressMemberPhoto(file);
-  const cleanId = (memberIdOrName || 'member_' + Date.now()).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `members/${cleanId}_${Date.now()}.jpg`;
 
-  // 2. Attempt direct upload to Firebase Storage
   try {
-    const storageRef = ref(storage, filename);
-    await uploadString(storageRef, compressedDataUrl, 'data_url', {
-      contentType: 'image/jpeg',
+    const cloudRecord = await uploadActivityImageToCloud(compressedDataUrl, {
+      title: `Foto Jemaat: ${memberIdOrName || 'Anggota Jemaat'}`,
+      category: 'Foto Anggota Jemaat',
+      description: 'Pas Foto 3x4 Kartu Anggota Jemaat GMIT Betel Fuimelang',
     });
-    const downloadUrl = await getDownloadURL(storageRef);
     return {
-      url: downloadUrl,
-      source: 'firebase_storage',
-      storagePath: filename,
+      url: cloudRecord.url,
+      source: cloudRecord.pendingSync ? 'device_queue' : 'cloud_server',
+      storagePath: cloudRecord.pendingSync
+        ? `local:activity_images/${cloudRecord.id}`
+        : `api:activity_images/${cloudRecord.id}`,
     };
-  } catch (storageErr: any) {
-    console.warn('[Firebase Storage] Could not upload directly to bucket, using cloud fallback:', storageErr?.message);
-    
-    // 3. Fallback: Save through the authenticated SYSJEGER image API.
-    try {
-      const cloudRecord = await uploadActivityImageToCloud(compressedDataUrl, {
-        title: `Foto Jemaat: ${memberIdOrName || 'Anggota Jemaat'}`,
-        category: 'Foto Anggota Jemaat',
-        description: 'Pas Foto 3x4 Kartu Anggota Jemaat GMIT Betel Fuimelang',
-      });
-      return {
-        url: cloudRecord.url,
-        source: 'cloud_server',
-        storagePath: `firestore:activity_images/${cloudRecord.id}`,
-      };
-    } catch (cloudErr) {
-      console.warn('[Cloud API] Fallback to compressed Data URL:', cloudErr);
-      return {
-        url: compressedDataUrl,
-        source: 'compressed_data',
-      };
-    }
+  } catch (error) {
+    // The member form can still submit this compressed photo with the member
+    // record. Detail-view updates perform their own offline photo retry.
+    console.warn('[Photo API] Using compressed photo with the member record:', error);
+    return {
+      url: compressedDataUrl,
+      source: 'compressed_data',
+    };
   }
 }

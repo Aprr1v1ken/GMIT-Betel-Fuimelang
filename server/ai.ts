@@ -3,6 +3,11 @@ import { GoogleGenAI } from '@google/genai';
 
 export const aiRouter = Router();
 
+aiRouter.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 
 const ai = apiKey
@@ -17,7 +22,7 @@ const ai = apiKey
   : null;
 
 // Keep the model configurable so Vercel can be upgraded without a code change.
-// gemini-2.5-flash is the safe default; local drafts remain available offline.
+// gemini-2.5-flash is the safe default; local drafts remain available without a key.
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 aiRouter.get('/status', (_req, res) => {
@@ -127,13 +132,17 @@ aiRouter.post('/warta', async (req, res) => {
     tone = 'Hangat dan Menghidupkan Persekutuan',
   } = req.body;
 
-  const rawItems = Array.isArray(items) ? items.join('\n- ') : String(items);
+  const itemList = (Array.isArray(items) ? items : [items]).map((item) => String(item || '').trim()).filter(Boolean);
+  const rawItems = itemList.join('\n- ');
+  const itemDraft = itemList.length > 0
+    ? itemList.map((item, index) => `${index + 1}. ${item}`).join('\n')
+    : 'Belum ada pokok warta yang dimasukkan. Tambahkan hanya informasi yang telah dikonfirmasi Majelis.';
 
   const prompt = `Anda adalah sekretariat Majelis Jemaat GMIT Betel Fuimelang, Klasis Alor Tengah Utara.
 Buatlah Draf Warta Jemaat Mingguan resmi yang rapi, tertib, dan bernuansa pastoral untuk dibacakan pada Ibadah Minggu tanggal ${bulletinDate}.
 
 Catatan / Pokok-pokok Warta:
-- ${rawItems || 'Jadwal Ibadah Minggu, Perjamuan Kudus bulan depan, Pembersihan gedung gereja hari Sabtu, Doa syukur keluarga.'}
+- ${rawItems || 'Belum ada pokok warta yang diberikan. Jangan mengarang jadwal atau kegiatan; tandai bagian yang perlu dikonfirmasi.'}
 
 Gaya Bahasa: ${tone}
 Penyampai: ${announcerName}
@@ -152,7 +161,7 @@ Format Warta Jemaat harus mencakup:
         model: DEFAULT_MODEL,
         contents: prompt,
         config: {
-          systemInstruction: 'Anda adalah asisten administrasi gerejawi GMIT yang ahli menyusun warta jemaat dengan tata bahasa Indonesia yang baik, tertib liturgis, dan penuh persaudaraan kristiani.',
+          systemInstruction: 'Anda adalah asisten administrasi gerejawi GMIT yang ahli menyusun warta jemaat dengan tata bahasa Indonesia yang baik, tertib liturgis, dan penuh persaudaraan kristiani. Jangan mengarang jadwal, pengumuman, atau peristiwa; tandai data yang belum tersedia untuk dikonfirmasi.',
         },
       });
       return res.json({ success: true, text: response.text || '' });
@@ -161,33 +170,29 @@ Format Warta Jemaat harus mencakup:
     console.warn('Gemini API call failed, generating contextual fallback:', err?.message);
   }
 
-  const fallback = `WARTA JEMAAT GMIT BETEL FUIMELANG
-Klasis Alor Tengah Utara — Wilayah Pelayanan Rayon I s/d IV
+  const fallback = `DRAF WARTA JEMAAT GMIT BETEL FUIMELANG
+Klasis Alor Tengah Utara
 Hari / Tanggal: ${bulletinDate}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Dokumen ini adalah draf lokal. Periksa dan sahkan setiap informasi sebelum dibagikan.
 
 I. SALAM PEMBUKA & UCAPAN SELAMAT DATANG
-Majelis Jemaat GMIT Betel Fuimelang mengucapkan selamat beribadah dalam persekutuan kasih Tuhan Yesus Kristus bagi seluruh bapak, ibu, saudara-saudari, pemuda, dan anak-anak yang terkasih. Teristimewa bagi bapak/ibu yang baru pertama kali beribadah bersama kami, kami menyambut dengan sukacita dan persaudaraan sejati.
+Majelis Jemaat GMIT Betel Fuimelang menyambut seluruh warga jemaat dan tamu dalam persekutuan kasih Tuhan Yesus Kristus.
 
-II. WARTA PELAYANAN & JADWAL SEPEKAN
-1. Ibadah Persekutuan Doa Rayon I s/d IV: Dilaksanakan hari Rabu pkl 17.00 WITA di rumah keluarga yang ditunjuk sesuai giliran rayon.
-2. Ibadah Persekutuan Kaum Perempuan & Kaum Bapak: Dilaksanakan hari Jumat pkl 16.30 WITA di gedung gereja.
-3. Ibadah Persekutuan Anak & Remaja (PAR): Hari Minggu pkl 06.30 WITA didampingi Pengasuh PAR.
-4. Ibadah Persekutuan Pemuda GMIT (GP): Hari Sabtu pkl 18.00 WITA.
+II. WARTA PELAYANAN & KEGIATAN
+${itemDraft}
 
 III. WARTA KHUSUS MAJELIS
-- Kerja bakti pembersihan lingkungan halaman dan gedung gereja pada hari Sabtu pagi pkl 06.30 WITA bersama seluruh warga rayon.
-- Pendataan jemaat berbasis digital sedang berlangsung; dimohon setiap kepala keluarga memperbarui dokumen kependudukan jemaat (KK & Surat Nikah/Baptis).
+[Tambahkan hanya pengumuman, sakramen, mutasi, atau ucapan syukur yang telah dikonfirmasi.]
 
-IV. POKOK DOA SYAFAAT SEPEKAN
-1. Doa untuk saudara-saudari yang sakit dan dalam pemulihan di RSUD Kalabahi serta di rumah.
-2. Doa untuk anak-anak dan pemuda yang menempuh pendidikan sekolah dan perguruan tinggi.
-3. Doa untuk para petani, pekebun, nelayan, dan pekerja di Lembur Tengah Alor agar Tuhan memberkati jerih lelah mereka.
-4. Doa untuk keutuhan bangsa, kedamaian gereja, dan seluruh pelayan Tuhan di Klasis Alor Tengah Utara.
+IV. POKOK DOA SYAFAAT
+1. Doa bagi warga jemaat yang sedang sakit atau dalam pemulihan.
+2. Doa bagi anak-anak, pemuda, dan keluarga dalam pendidikan serta pekerjaan.
+3. Doa bagi pelayanan Majelis, rayon, dan seluruh warga jemaat.
 
 V. PENUTUP
 "Sebab segala sesuatu adalah dari Dia, dan oleh Dia, dan kepada Dia: Bagi Dialah kemuliaan sampai selama-lamanya!" (Roma 11:36)
-Tuhan Yesus memberkati seluruh jemaat. Teriring salam dan doa dari ${announcerName}.`;
+Draf disiapkan untuk diperiksa oleh ${announcerName}.`;
 
   return res.json({ success: true, text: fallback });
 });
@@ -719,15 +724,15 @@ Iman sejati tidak tinggal diam di dalam kepala. Iman sejati memiliki mata yang m
 aiRouter.post('/church-news', async (req, res) => {
   const {
     mode = 'news', // 'news' (Berita & Bakti) | 'agenda' (Agenda & Jadwal Kegiatan)
-    category = 'Bakti Jumat & Gotong Royong',
-    title = 'Kerja Bakti Jumat Bersih & Pembersihan Lingkungan Gedung Gereja Betel Fuimelang',
-    date = 'Jumat, 24 Oktober 2026',
-    startTime = '07:30',
-    endTime = '11:30',
-    location = 'Halaman Gedung Gereja & Pastori GMIT Betel Fuimelang',
-    coordinator = 'Badan Pengurus Pemuda & Kaum Bapak',
-    participants = 'Seluruh Warga Rayon I s/d IV dan Pemuda',
-    notes = 'Pembersihan saluran air musim hujan, pemotongan rumput halaman gereja, perapian pagar bambu, serta penanaman bibit pohon peneduh, ditutup doa syukur dan santap ubi keladi bersama.',
+    category = 'Kegiatan Jemaat',
+    title = '',
+    date = '',
+    startTime = '',
+    endTime = '',
+    location = '',
+    coordinator = '',
+    participants = '',
+    notes = '',
     imageUrl = '',
   } = req.body;
 
@@ -790,16 +795,16 @@ Buatlah laporan berita gereja yang lengkap dengan bagian-bagian berikut:
 
 4. LIPUTAN BERITA LENGKAP:
 - Pembukaan & Latar Belakang Semangat Gotong Royong
-- Jalannya Kegiatan & Antusiasme Warga Jemaat / Pemuda
-- Hasil-hasil Nyata Pelaksanaan Bakti / Kegiatan
-- Kesaksian / Pesan Gembala atau Koordinator Pelaksana
-- Rencana Tindak Lanjut Pemeliharaan Bersama
+- Jalannya kegiatan hanya berdasarkan catatan; tandai [perlu konfirmasi] bila belum tersedia
+- Hasil nyata hanya berdasarkan catatan; jangan membuat jumlah atau klaim keberhasilan
+- Kesaksian/pesan hanya bila kutipan diberikan; jangan membuat kutipan
+- Usulan tindak lanjut harus diberi label usulan, bukan keputusan resmi
 
 5. TEKS FORMAT WHATSAPP SIAP SEBAR:
 (Format teks dengan emoji kristiani, tebal, miring, poin-poin rapi, cocok dibagikan ke grup WA Rayon & Jemaat GMIT)
 
 6. DOA SYUKUR PENUTUP KEGIATAN:
-(Naskah doa syukur atas kelancaran bakti jumat dan kesehatan seluruh warga yang berpartisipasi)`;
+(Naskah doa penutup tanpa mengklaim kelancaran atau hasil yang tidak tercantum dalam catatan)`;
 
   try {
     if (ai) {
@@ -808,8 +813,8 @@ Buatlah laporan berita gereja yang lengkap dengan bagian-bagian berikut:
         contents: prompt,
         config: {
           systemInstruction: isAgenda
-            ? 'Anda adalah koordinator pelayanan jemaat GMIT Betel Fuimelang yang teliti, tertib organisatoris, dan berjiwa penggembalaan kristiani.'
-            : 'Anda adalah redaktur media jemaat GMIT yang berwawasan kasih Kristus, menjunjung tinggi nilai kearifan gotong-royong Nusa Tenggara Timur, dan teliti dalam penyusunan berita pelayanan gereja.',
+            ? 'Anda adalah koordinator pelayanan jemaat GMIT Betel Fuimelang yang teliti, tertib organisatoris, dan berjiwa penggembalaan kristiani. Gunakan hanya data input untuk fakta kegiatan; jangan mengarang tanggal, lokasi, peserta, atau hasil.'
+            : 'Anda adalah redaktur media jemaat GMIT yang berwawasan kasih Kristus dan teliti dalam penyusunan berita pelayanan gereja. Jangan mengarang jumlah peserta, hasil pekerjaan, kutipan kesaksian, atau keberhasilan; tandai informasi yang perlu dikonfirmasi.',
         },
       });
       return res.json({
@@ -831,98 +836,61 @@ Buatlah laporan berita gereja yang lengkap dengan bagian-bagian berikut:
   }
 
   const fallback = isAgenda
-    ? `AGENDA & JADWAL PELAYANAN KEGIATAN GEREJA
+    ? `DRAF AGENDA & JADWAL PELAYANAN KEGIATAN GEREJA
 GMIT BETEL FUIMELANG — KLASIS ALOR TENGAH UTARA
-Kategori: ${category}
+Kategori: ${category || '[kategori belum diisi]'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Draf ini hanya memakai data yang dimasukkan. Lengkapi dan sahkan sebelum dipublikasikan.
 
-1. NAMA KEGIATAN & TEMA RESMI:
-"${title}"
-Tema: "Berakar, Bertumbuh, dan Berbuah Nyata dalam Pelayanan Kristus di Lembur Tengah"
+1. NAMA KEGIATAN:
+${title || '[nama kegiatan belum diisi]'}
 
-2. AYAT PENDORONG & LANDASAN TEOLOGIS:
-"Tetapi segala sesuatu harus berlangsung dengan sopan dan teratur." (1 Korintus 14:40)
+2. LANDASAN PELAYANAN:
+"Segala sesuatu harus berlangsung dengan sopan dan teratur." (1 Korintus 14:40)
 
-3. RUNDOWN JADWAL ACARA (WITA):
-• ${startTime} - 08:00 : Registrasi Kehadiran Warga Jemaat & Pemuda (Seksi Absensi)
-• 08:00 - 08:30 : Ibadah Pembukaan & Refleksi Firman Singkat oleh Majelis / Pelayan
-• 08:30 - 10:30 : Pelaksanaan Inti Kegiatan: ${title}
-  - Pembagian tugas kelompok kerja Rayon 1 s/d 4
-  - Pengawasan dan koordinasi oleh: ${coordinator}
-• 10:30 - 11:00 : Jamuan Kasih & Ramah Tamah Persaudaraan Jemaat
-• 11:00 - ${endTime} : Evaluasi Hasil Kegiatan, Doa Berkat, dan Penutupan Bersama
+3. RANCANGAN RUNDOWN (WITA):
+• ${startTime || '[waktu mulai]'} — Pembukaan dan doa.
+• [atur waktu] — Pelaksanaan inti: ${title || '[nama kegiatan]'}.
+• ${endTime || '[waktu selesai]'} — Evaluasi, doa, dan penutupan.
 
-4. DAFTAR PERSIAPAN & PERLENGKAPAN:
-• Lokasi Pelaksanaan: ${location}
-• Peserta Sasaran: ${participants}
-• Catatan Tambahan: ${notes}
-• Peralatan: Disesuaikan dengan kebutuhan kerja / kebaktian
+4. DATA PERSIAPAN:
+• Lokasi: ${location || '[lengkapi lokasi]'}
+• Peserta: ${participants || '[lengkapi peserta]'}
+• Koordinator: ${coordinator || '[lengkapi koordinator]'}
+• Catatan/perlengkapan: ${notes || '[lengkapi kebutuhan kegiatan]'}
 
-5. FORMAT BROADCAST UNDANGAN WHATSAPP JEMAAT:
-📅 *UNDANGAN AGENDA KEGIATAN GMIT BETEL FUIMELANG* 📅
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Shalom Bapak, Ibu, Pemuda, dan Saudara-saudari terkasih!
+5. DRAF UNDANGAN WHATSAPP:
+Shalom. Majelis mengundang jemaat untuk ${title || '[nama kegiatan]'} pada ${date || '[tanggal]'}, pukul ${startTime || '[waktu]'}–${endTime || '[waktu]'} WITA di ${location || '[lokasi]'}. Koordinator: ${coordinator || '[nama]'}.
+Catatan: ${notes || '[tambahkan catatan yang diperlukan]'}
 
-Majelis Jemaat mengundang seluruh jemaat untuk berpartisipasi dalam agenda pelayanan:
-📌 *Kegiatan:* ${title}
-🗓️ *Hari/Tanggal:* ${date}
-⏰ *Waktu:* ${startTime} - ${endTime} WITA
-📍 *Tempat:* ${location}
-👥 *Peserta:* ${participants}
-👤 *Koordinator:* ${coordinator}
-
-📝 *Catatan:* ${notes}
-
-_"Dan marilah kita saling memperhatikan supaya kita saling mendorong dalam kasih dan dalam pekerjaan baik." (Ibrani 10:24)_
-
-Kehadiran dan keikutsertaan kita bersama adalah sukacita bagi rumah Tuhan. Kiranya damai sejahtera Kristus menyertai kita semua!
-
-6. DOA PERSIAPAN & PENGUTUSAN:
-"Bapa Surgawi, terima kasih atas anugerah kesempatan untuk bersekutu dan melayani. Kami menaruh agenda ${title} ini ke dalam tangan pengasihan-Mu. Berikanlah hikmat kepada panitia dan koordinator, sertai setiap warga jemaat dengan sukacita dan kesehatan. Jadikanlah seluruh rangkaian acara ini kemuliaan bagi nama-Mu. Di dalam nama Tuhan Yesus, Tuhan dan Kepala Gereja. Amin."`
-    : `LAPORAN WARTA & BERITA KEGIATAN GEREJA
+6. DOA PERSIAPAN:
+"Bapa Surgawi, berikanlah hikmat kepada Majelis dan panitia dalam mempersiapkan ${title || 'kegiatan ini'}. Sertai seluruh peserta dan jadikan pelayanan ini berlangsung tertib, aman, dan untuk kemuliaan nama-Mu. Amin."`
+    : `DRAF LAPORAN WARTA & BERITA KEGIATAN GEREJA
 GMIT BETEL FUIMELANG — KLASIS ALOR TENGAH UTARA
-Kategori: ${category}
+Kategori: ${category || '[kategori belum diisi]'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Draf ini tidak menambahkan hasil, jumlah peserta, atau pekerjaan yang tidak diberikan. Verifikasi sebelum dipublikasikan.
 
-1. JUDUL BERITA RESMI:
-"Semangat Kasih & Gotong Royong: Warga Jemaat GMIT Betel Fuimelang Gelar ${title}"
+1. JUDUL BERITA:
+${title || '[judul kegiatan belum diisi]'}
 
-2. AYAT ALKITAB RUJUKAN:
+2. AYAT RUJUKAN:
 "Segala sesuatu yang kamu lakukan, perbuatlah dengan segenap hatimu seperti untuk Tuhan dan bukan untuk manusia." (Kolose 3:23)
 
-3. RINGKASAN WARTA SINGKAT:
-Pada hari ${date}, warga GMIT Betel Fuimelang di bawah koordinasi ${coordinator} telah sukses melaksanakan kegiatan ${title} bertempat di ${location}. Kegiatan ini diikuti dengan penuh sukacita oleh ${participants} sebagai bukti nyata ketaatan iman dan kepedulian bersama terhadap rumah Tuhan dan lingkungan persekutuan.
+3. RINGKASAN BERDASARKAN INPUT:
+Kegiatan ${title || '[nama kegiatan]'} pada ${date || '[tanggal]'} di ${location || '[lokasi]'}, dikoordinasi oleh ${coordinator || '[koordinator]'}.
+Peserta: ${participants || '[lengkapi peserta]'}.
 
-4. LIPUTAN BERITA LENGKAP:
-Di tengah kesejukan perbukitan Lembur Tengah, puluhan warga jemaat dari anak-anak, pemuda-pemudi, kaum ibu, hingga kaum bapak berkumpul sejak pagi hari untuk menyatakan bakti kasih. Dengan membawa peralatan gotong-royong seperti cangkul, parang, sapu lidi, dan kuas cat, jemaat bergotong-royong dengan penuh riang gembira.
+4. CATATAN / HASIL YANG DILAPORKAN:
+${notes || '[Lengkapi hasil nyata kegiatan setelah dikonfirmasi. Jangan menuliskan hasil yang belum terjadi.]'}
 
-Beberapa agenda pekerjaan yang telah dituntaskan antara lain:
-- Pembersihan menyeluruh saluran drainase dan halaman gedung kebaktian guna mengantisipasi genangan air hujan.
-- Perapian rumput dan tanaman hias di pelataran pastori dan gereja.
-- Pengecatan dan perbaikan pagar gerbang utama Betel Fuimelang.
-- Aksi peduli lingkungan dan penataan tempat pembuangan sampah ramah lingkungan.
+5. DRAF PESAN WHATSAPP:
+Shalom. Berikut informasi kegiatan ${title || '[nama kegiatan]'} pada ${date || '[tanggal]'} di ${location || '[lokasi]'}.
+Peserta: ${participants || '[peserta]'}.
+Catatan/hasil: ${notes || '[lengkapi setelah konfirmasi]'}.
 
-Koordinator pelaksana, ${coordinator}, menyampaikan rasa syukur dan haru atas kekompakan jemaat yang meluangkan waktu di tengah kesibukan kebun dan keluarga demi kemuliaan rumah Tuhan. Kegiatan kemudian diakhiri dengan istirahat bersama, menikmati sajian ubi keladi, pisang rebus, dan teh hangat berbalut tawa persaudaraan sejati.
-
-5. TEKS FORMAT WHATSAPP SIAP SEBAR:
-🌿 *BERITA KEGIATAN & BAKTI GEREJA GMIT BETEL FUIMELANG* 🌿
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Shalom Saudara-saudari terkasih!
-
-Puji Tuhan, pada hari *${date}*, telah terlaksana kegiatan:
-📌 *${title}*
-📍 *Lokasi:* ${location}
-👥 *Peserta:* ${participants}
-🎯 *Hasil:* ${notes}
-
-_"Hendaklah terangmu bercahaya di depan orang, supaya mereka melihat perbuatanmu yang baik dan memuliakan Bapamu yang di sorga." (Matius 5:16)_
-
-Majelis Jemaat GMIT Betel Fuimelang mengucapkan limpah terima kasih atas ketulusan hati, waktu, dan tenaga seluruh warga jemaat yang telah berpartisipasi. Kiranya Tuhan Yesus memberkati ladang, kebun, keluarga, dan kesehatan kita sekalian!
-
-#BaktiGereja #GMITBetelFuimelang #GotongRoyongKristen #AlorTengahUtara
-
-6. DOA SYUKUR PENUTUP KEGIATAN:
-"Ya Bapa Yang Mahakuasa, Pemilik Kehidupan dan Pemelihara Gereja kami. Kami menaikkan syukur yang melimpah atas selesainya kegiatan ${category} pada hari ini. Terima kasih atas kesehatan, cuaca yang teduh, dan semangat persaudaraan yang Kau tanamkan di dalam hati setiap jemaat Betel Fuimelang. Berkati setiap tangan yang telah bekerja mencangkul, membersihkan, dan melayani. Kuduskanlah gedung dan lingkungan gereja ini agar senantiasa menjadi tempat di mana nama-Mu dipuji dan dimuliakan. Di dalam nama Tuhan Yesus Kristus kami berdoa dan mengucap syukur. Amin."`;
+6. DOA PENUTUP:
+"Bapa Surgawi, kami menyerahkan setiap pelayanan jemaat ke dalam penyertaan-Mu. Berkatilah Majelis, koordinator, dan seluruh peserta, dan tuntun kami untuk menyampaikan laporan dengan jujur serta membangun persekutuan. Amin."`;
 
   return res.json({
     success: true,

@@ -15,10 +15,11 @@ export interface AuthUser {
 }
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
-// Production deployments must provide SESSION_SECRET. A random fallback avoids
-// shipping a known signing key, while local development remains convenient.
+// Vercel deployments must provide SESSION_SECRET so sessions and WebAuthn
+// challenges remain valid across serverless instances. Local development has
+// a separate non-production fallback.
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.AUTH_SECRET ||
-  (process.env.NODE_ENV === 'production' ? randomBytes(32).toString('hex') : 'sysjeger-local-development-secret');
+  (process.env.VERCEL ? (() => { throw new Error('SESSION_SECRET is required on Vercel'); })() : 'sysjeger-local-development-secret');
 
 function base64url(value: string | Buffer): string {
   return Buffer.from(value).toString('base64url');
