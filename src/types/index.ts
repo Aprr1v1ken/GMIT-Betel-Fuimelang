@@ -376,6 +376,7 @@ export const STANDARD_OCCUPATION_OPTIONS = [
 export type StandardOccupation = typeof STANDARD_OCCUPATION_OPTIONS[number];
 
 export type CardColorThemeId = 
+  | 'chroma'
   | 'gold'
   | 'emerald'
   | 'sapphire'
