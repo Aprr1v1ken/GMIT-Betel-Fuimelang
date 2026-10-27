@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import './chromatic.css';
 
 // Google Maps Platform Quota Defense listener
 (window as any).gm_authFailure = () => {

@@ -49,6 +49,22 @@ interface ThemeDefinition {
 }
 
 const THEMES: Record<string, ThemeDefinition> = {
+  chroma: {
+    id: 'chroma',
+    name: 'Aurora Chroma — Signature',
+    dotColor: '#f472b6',
+    bgClass: 'bg-gradient-to-br from-[#08031a] via-[#101038] to-[#001b25]',
+    borderClass: 'border-2 border-fuchsia-400/70 shadow-fuchsia-500/20',
+    titleColor: 'text-white',
+    headerSub: 'text-cyan-300',
+    accentText: 'text-fuchsia-300',
+    badgeClass: 'bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/50',
+    photoBg: 'bg-slate-950 border-cyan-400/50',
+    textColor: 'text-slate-100',
+    labelColor: 'text-violet-200/80',
+    dividerColor: 'border-cyan-300/40',
+    footerText: 'text-cyan-200',
+  },
   gold: {
     id: 'gold',
     name: 'Midnight Gold',
@@ -157,7 +173,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const downloadCardRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const [activeThemeId, setActiveThemeId] = useState<CardColorThemeId>('gold');
+  const [activeThemeId, setActiveThemeId] = useState<CardColorThemeId>('chroma');
   const [printMode, setPrintMode] = useState<'card-only' | 'full'>('card-only');
   const [currentPhoto, setCurrentPhoto] = useState<string | undefined>(member?.photoUrl);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
@@ -230,7 +246,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
       }
       return THEMES.gold;
     }
-    return THEMES[activeThemeId] || THEMES.gold;
+    return THEMES[activeThemeId] || THEMES.chroma;
   };
 
   const currentTheme = getResolvedTheme();
@@ -248,25 +264,29 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
           image.onerror = () => resolve();
         });
       }));
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(element, {
-        scale: 4,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#0c1630',
-        windowWidth: 1200,
+      const { toPng } = await import('html-to-image');
+      const bounds = element.getBoundingClientRect();
+      const dataUrl = await toPng(element, {
+        pixelRatio: 4,
+        width: bounds.width,
+        height: bounds.height,
+        cacheBust: false,
+        skipFonts: true,
+        style: {
+          position: 'static',
+          left: '0',
+          top: '0',
+          margin: '0',
+          transform: 'none',
+          animation: 'none',
+        },
       });
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => result ? resolve(result) : reject(new Error('Kartu tidak dapat dirender.')), 'image/png');
-      });
-      const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
-      anchor.href = url;
+      anchor.href = dataUrl;
       anchor.download = `Kartu-KTP-${member.fullName.replace(/[^A-Za-z0-9]+/g, '-')}.png`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setUploadToast('✅ Kartu ID-1 berhasil diunduh sebagai PNG. Foto dan tema yang dipilih sudah disertakan.');
     } catch (error: any) {
       setUploadToast(`❌ ${error?.message || 'Kartu gagal diunduh. Coba gunakan tombol Cetak Kartu.'}`);
@@ -290,7 +310,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm print:p-0 print:bg-white print:static print:block">
+    <div className={`member-detail-modal ${printMode === 'card-only' ? 'member-card-print-mode' : ''} fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm print:p-0 print:bg-white print:static print:block`}>
       {printMode === 'card-only' && (
         <style>{`
           @media print {
@@ -430,8 +450,11 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
           {/* Digital Member Card Visual (Printable ID Card with chosen theme) */}
           <div
             ref={cardRef}
-            className={`p-6 rounded-2xl ${currentTheme.bgClass} ${currentTheme.borderClass} shadow-2xl relative overflow-hidden print:m-0 print:shadow-none print:[print-color-adjust:exact] print:[-webkit-print-color-adjust:exact] transition-all duration-300 ${printMode === 'card-only' ? 'print:hidden' : ''}`}
+            className={`chromatic-member-card ${currentTheme.isLight ? 'chromatic-card--light' : ''} p-6 rounded-2xl ${currentTheme.bgClass} ${currentTheme.borderClass} shadow-2xl relative overflow-hidden print:m-0 print:shadow-none print:[print-color-adjust:exact] print:[-webkit-print-color-adjust:exact] transition-all duration-300 ${printMode === 'card-only' ? 'print:hidden' : ''}`}
           >
+            <div className="chromatic-card-spectrum" />
+            <div className="chromatic-card-microtext">GMIT BETEL FUIMELANG · SOLI DEO GLORIA · KARTU ANGGOTA RESMI · AURORA CHROMA</div>
+
             {/* Watermark Crest */}
             <div className="absolute right-4 -bottom-6 opacity-10 pointer-events-none w-48 h-48">
               <img
@@ -443,19 +466,19 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             </div>
 
             {/* Top Card Bar */}
-            <div className={`flex items-center justify-between border-b ${currentTheme.dividerColor} pb-3 mb-4`}>
+            <div className={`relative z-10 flex flex-wrap items-center justify-between gap-3 border-b ${currentTheme.dividerColor} pb-3 mb-4`}>
               <div className="flex items-center gap-3">
                 <img
                   src="/images/regenerated_image_1792510154483.png"
                   alt="GMIT Logo"
-                  className="w-10 h-10 rounded-full border border-amber-400/60 object-cover shadow-sm shrink-0"
+                  className="chromatic-logo-frame w-10 h-10 rounded-full border border-amber-400/60 object-cover shadow-sm shrink-0"
                   referrerPolicy="no-referrer"
                 />
                 <div>
                   <div className={`text-[10px] font-bold tracking-wider ${currentTheme.headerSub} uppercase`}>
                     Gereja Masehi Injili di Timor
                   </div>
-                  <div className={`text-sm font-extrabold tracking-wide ${currentTheme.titleColor}`}>
+                  <div className={`chromatic-foil-text text-sm font-extrabold tracking-wide ${currentTheme.titleColor}`}>
                     GMIT BETEL FUIMELANG
                   </div>
                   <div className={`text-[9px] ${currentTheme.labelColor}`}>
@@ -464,22 +487,25 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${currentTheme.badgeClass}`}>
-                  KARTU JEMAAT
-                </span>
-                <div className={`text-[10px] font-mono mt-1 ${currentTheme.labelColor}`}>
-                  {member.memberNo}
+              <div className="flex items-center gap-3 text-right shrink-0">
+                <div className="chromatic-holo-seal" aria-label="Segel hologram GMIT"><span>GMIT</span></div>
+                <div>
+                  <span className={`chromatic-card-badge inline-block px-2 py-0.5 rounded text-[10px] font-bold ${currentTheme.badgeClass}`}>
+                    KARTU JEMAAT
+                  </span>
+                  <div className={`text-[10px] font-mono mt-1 ${currentTheme.labelColor}`}>
+                    {member.memberNo}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Middle Card Details */}
-            <div className="flex flex-col sm:flex-row gap-5 items-start">
+            <div className="relative z-10 flex flex-col sm:flex-row gap-5 items-start">
               {/* Photo box & Upload Control */}
               <div className="flex flex-col items-center gap-2 shrink-0">
                 <div
-                  className={`w-28 h-36 rounded-xl ${currentTheme.photoBg} border-2 overflow-hidden flex flex-col items-center justify-center relative shadow-inner group`}
+                  className={`chromatic-photo-frame w-28 h-36 rounded-xl ${currentTheme.photoBg} border-2 overflow-hidden flex flex-col items-center justify-center relative shadow-inner group`}
                 >
                   {(currentPhoto || member.photoUrl) ? (
                     <img
@@ -551,7 +577,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
                   <span className={`text-[10px] block ${currentTheme.labelColor}`}>
                     Nama Anggota Jemaat:
                   </span>
-                  <span className={`text-base font-bold tracking-wide ${currentTheme.titleColor}`}>
+                  <span className={`chromatic-foil-text text-base font-bold tracking-wide ${currentTheme.titleColor}`}>
                     {member.fullName}
                   </span>
                 </div>
@@ -613,7 +639,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             </div>
 
             {/* Bottom Card Footer */}
-            <div className={`mt-4 pt-3 border-t ${currentTheme.dividerColor} flex items-center justify-between text-[10px]`}>
+            <div className={`relative z-10 mt-4 pt-3 border-t ${currentTheme.dividerColor} flex items-center justify-between text-[10px]`}>
               <div className={currentTheme.labelColor}>
                 <span>Alamat: {member.address}, Fuimelang</span>
               </div>
@@ -627,7 +653,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
           <div
             ref={downloadCardRef}
             aria-hidden="true"
-            className={`printable-member-id-card ${currentTheme.bgClass} ${currentTheme.borderClass} rounded-[2mm] relative overflow-hidden ${printMode === 'card-only' ? 'print:block' : 'print:hidden'}`}
+            className={`printable-member-id-card chromatic-member-card ${currentTheme.isLight ? 'chromatic-card--light' : ''} ${currentTheme.bgClass} ${currentTheme.borderClass} rounded-[2mm] relative overflow-hidden ${printMode === 'card-only' ? 'print:block' : 'print:hidden'}`}
             style={{
               position: 'fixed', left: '-10000px', top: 0,
               width: '85.6mm', height: '53.98mm', padding: '2.5mm',
@@ -635,29 +661,34 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
               fontFamily: 'Arial, sans-serif',
             }}
           >
+            <div className="chromatic-card-spectrum" />
+            <div className="chromatic-card-microtext">GMIT BETEL FUIMELANG · SOLI DEO GLORIA · KARTU ANGGOTA RESMI · AURORA CHROMA</div>
             <div className="absolute right-0 bottom-0 w-[28mm] h-[28mm] opacity-10 pointer-events-none">
               <img src="/images/regenerated_image_1792510154483.png" alt="" className="w-full h-full object-contain" />
             </div>
             <div className={`flex items-center justify-between border-b ${currentTheme.dividerColor} pb-[1.2mm] mb-[1.5mm] relative z-10`}>
               <div className="flex items-center gap-[1.5mm] min-w-0">
-                <img src="/images/regenerated_image_1792510154483.png" alt="" className="w-[8mm] h-[8mm] rounded-full object-cover shrink-0" />
+                <img src="/images/regenerated_image_1792510154483.png" alt="" className="chromatic-logo-frame w-[8mm] h-[8mm] rounded-full object-cover shrink-0" />
                 <div className="min-w-0">
                   <div className={`text-[5pt] font-bold uppercase ${currentTheme.headerSub}`}>Gereja Masehi Injili di Timor</div>
-                  <div className={`text-[7pt] font-extrabold leading-tight ${currentTheme.titleColor}`}>GMIT BETEL FUIMELANG</div>
+                  <div className={`chromatic-foil-text text-[7pt] font-extrabold leading-tight ${currentTheme.titleColor}`}>GMIT BETEL FUIMELANG</div>
                   <div className={`text-[4.5pt] ${currentTheme.labelColor}`}>Klasis Alor Tengah Utara</div>
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <div className={`text-[4.5pt] font-bold ${currentTheme.accentText}`}>KARTU JEMAAT</div>
-                <div className={`text-[4.5pt] font-mono ${currentTheme.labelColor}`}>{member.memberNo}</div>
+              <div className="flex items-center gap-[1mm] text-right shrink-0">
+                <div className="chromatic-holo-seal"><span>GMIT</span></div>
+                <div>
+                  <div className={`chromatic-card-badge rounded-[0.8mm] px-[1mm] py-[0.2mm] text-[4.5pt] font-bold ${currentTheme.accentText}`}>KARTU JEMAAT</div>
+                  <div className={`text-[4.5pt] font-mono mt-[0.4mm] ${currentTheme.labelColor}`}>{member.memberNo}</div>
+                </div>
               </div>
             </div>
             <div className="flex gap-[2.5mm] flex-1 min-h-0 relative z-10">
-              <div className={`w-[16mm] h-[21mm] shrink-0 rounded-[1.5mm] border overflow-hidden flex items-center justify-center ${currentTheme.photoBg}`}>
+              <div className={`chromatic-photo-frame w-[16mm] h-[21mm] shrink-0 rounded-[1.5mm] border overflow-hidden flex items-center justify-center ${currentTheme.photoBg}`}>
                 {(currentPhoto || member.photoUrl) ? <img src={currentPhoto || member.photoUrl} alt="" className="w-full h-full object-cover" /> : <User className={`w-[7mm] h-[7mm] ${currentTheme.labelColor}`} />}
               </div>
               <div className="flex-1 min-w-0 grid grid-cols-2 gap-x-[2mm] gap-y-[1mm] content-start text-[5.2pt]">
-                <div className="col-span-2 mb-[0.5mm]"><div className={`text-[4.5pt] ${currentTheme.labelColor}`}>NAMA ANGGOTA JEMAAT</div><div className={`text-[7.5pt] leading-tight font-extrabold ${currentTheme.titleColor}`}>{member.fullName}</div></div>
+                <div className="col-span-2 mb-[0.5mm]"><div className={`text-[4.5pt] ${currentTheme.labelColor}`}>NAMA ANGGOTA JEMAAT</div><div className={`chromatic-foil-text text-[7.5pt] leading-tight font-extrabold ${currentTheme.titleColor}`}>{member.fullName}</div></div>
                 <div className="col-span-2"><span className={currentTheme.labelColor}>Tempat/tgl lahir: </span><span className={`font-semibold ${currentTheme.textColor}`}>{member.birthPlace || '-'}, {formatDateDMY(member.birthDate)}</span></div>
                 <div><span className={currentTheme.labelColor}>L/P: </span><span className={`font-semibold ${currentTheme.textColor}`}>{member.gender === 'Laki-laki' ? 'L' : member.gender === 'Perempuan' ? 'P' : '-'}</span></div>
                 <div><span className={currentTheme.labelColor}>Rayon: </span><span className={`font-bold ${currentTheme.accentText}`}>{member.rayonName || member.rayonId || '-'}</span></div>
