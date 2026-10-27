@@ -32,8 +32,8 @@ export function addMemberToOfflineQueue(memberData: Partial<Member>): Member {
     familyRole: memberData.familyRole || 'Anak',
     gender: memberData.gender || 'Laki-laki',
     birthPlace: memberData.birthPlace || 'Fuimelang',
-    birthDate: memberData.birthDate || '1995-01-01',
-    address: memberData.address || 'Desa Lembur Tengah',
+    birthDate: memberData.birthDate || '',
+    address: memberData.address || '',
     kelurahan: memberData.kelurahan || 'Lembur Tengah',
     kecamatan: memberData.kecamatan || 'Alor Tengah Utara',
     kabupaten: memberData.kabupaten || 'Alor',
@@ -41,12 +41,12 @@ export function addMemberToOfflineQueue(memberData: Partial<Member>): Member {
     email: memberData.email || '',
     maritalStatus: memberData.maritalStatus || 'Belum Menikah',
     spouseName: memberData.spouseName || '',
-    rayonId: memberData.rayonId || 'r1',
-    rayonName: memberData.rayonName || 'Rayon Pelayanan',
-    categorialGroupId: memberData.categorialGroupId || 'c1',
-    categorialGroupName: memberData.categorialGroupName || 'Kategorial',
+    rayonId: memberData.rayonId || '',
+    rayonName: memberData.rayonName || '',
+    categorialGroupId: memberData.categorialGroupId || '',
+    categorialGroupName: memberData.categorialGroupName || '',
     membershipStatus: memberData.membershipStatus || 'Tetap',
-    baptismStatus: memberData.baptismStatus || 'Sudah',
+    baptismStatus: memberData.baptismStatus || 'Belum',
     baptismDate: memberData.baptismDate || '',
     confirmationStatus: memberData.confirmationStatus || 'Belum',
     confirmationDate: memberData.confirmationDate || '',
@@ -148,10 +148,9 @@ export async function syncOfflineQueueToServer(
 
   for (const item of queue) {
     try {
-      // Clean up temporary offline fields before posting
+      // Keep the temporary ID as an idempotency key. The server recognizes
+      // this offline-prefixed ID and returns the existing row on a retry.
       const payload: Partial<Member> = { ...item };
-      const tempId = payload.id;
-      delete payload.id;
       delete payload.isOfflinePending;
 
       const res = await createMemberApi(payload);
@@ -176,4 +175,83 @@ export async function syncOfflineQueueToServer(
   }
 
   return { syncedCount, failedCount, errors };
+}
+
+const OFFLINE_MEMBER_PHOTOS_KEY = 'sysjeger_offline_member_photos';
+
+export function getOfflineMemberPhotos(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(OFFLINE_MEMBER_PHOTOS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function cacheMemberPhotoOffline(memberId: string, photoUrl: string) {
+  try {
+    const photos = getOfflineMemberPhotos();
+    photos[memberId] = photoUrl;
+    localStorage.setItem(OFFLINE_MEMBER_PHOTOS_KEY, JSON.stringify(photos));
+  } catch (error) {
+    console.warn('Could not queue member photo for offline sync:', error);
+  }
+}
+
+export function removeOfflineMemberPhoto(memberId: string) {
+  try {
+    const photos = getOfflineMemberPhotos();
+    delete photos[memberId];
+    localStorage.setItem(OFFLINE_MEMBER_PHOTOS_KEY, JSON.stringify(photos));
+  } catch {
+    // Ignore storage cleanup failures; the next sync can retry safely.
+  }
+}
+
+export async function syncOfflineMemberPhotos(
+  updatePhotoApi: (memberId: string, photoUrl: string) => Promise<any>,
+): Promise<{ syncedCount: number; remainingCount: number }> {
+  const photos = getOfflineMemberPhotos();
+  let syncedCount = 0;
+  for (const [memberId, photoUrl] of Object.entries(photos)) {
+    try {
+      const result = await updatePhotoApi(memberId, photoUrl);
+      if (result?.success === false) continue;
+      removeOfflineMemberPhoto(memberId);
+      syncedCount++;
+    } catch {
+      // Keep the photo queued until a server is reachable.
+    }
+  }
+  return { syncedCount, remainingCount: Object.keys(getOfflineMemberPhotos()).length };
+}
+
+const OFFLINE_DATA_KEY = 'sysjeger_offline_data_snapshot';
+
+export function getOfflineDataSnapshot<T extends Record<string, any> = Record<string, any>>(): T | null {
+  try {
+    const raw = localStorage.getItem(OFFLINE_DATA_KEY);
+    return raw ? JSON.parse(raw) as T : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cacheOfflineDataSnapshot(data: Record<string, any>) {
+  try {
+    localStorage.setItem(OFFLINE_DATA_KEY, JSON.stringify(data));
+  } catch (error) {
+    // Large data URLs should not prevent the rest of the church data from
+    // being available offline. Photos have their own offline cache/queue.
+    try {
+      const lightweight = JSON.parse(JSON.stringify(data, (key, value) => {
+        if ((key === 'photoUrl' || key === 'imageUrl' || key === 'url') && typeof value === 'string' && value.startsWith('data:')) return '';
+        return value;
+      }));
+      localStorage.setItem(OFFLINE_DATA_KEY, JSON.stringify(lightweight));
+    } catch (fallbackError) {
+      console.warn('Could not cache offline data snapshot:', fallbackError);
+    }
+  }
 }

@@ -3,7 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 
 export const aiRouter = Router();
 
-const apiKey = process.env.GEMINI_API_KEY || '';
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 
 const ai = apiKey
   ? new GoogleGenAI({
@@ -16,7 +16,18 @@ const ai = apiKey
     })
   : null;
 
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+// Keep the model configurable so Vercel can be upgraded without a code change.
+// gemini-2.5-flash is the safe default; local drafts remain available offline.
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+aiRouter.get('/status', (_req, res) => {
+  res.json({
+    success: true,
+    configured: Boolean(ai),
+    provider: ai ? 'gemini' : 'local-draft',
+    model: ai ? DEFAULT_MODEL : null,
+  });
+});
 
 // 1. Asisten Khotbah & Renungan GMIT
 aiRouter.post('/sermon', async (req, res) => {

@@ -36,20 +36,27 @@ import { BackupView } from './components/views/BackupView.tsx';
 import { AuditLogsView } from './components/views/AuditLogsView.tsx';
 import { ReportsView } from './components/views/ReportsView.tsx';
 import { SettingsView } from './components/views/SettingsView.tsx';
-import { AIAssistantView } from './components/views/AIAssistantView.tsx';
-import { GoogleMapsView } from './components/views/GoogleMapsView.tsx';
-import { GoogleWorkspaceView } from './components/views/GoogleWorkspaceView.tsx';
 
 import * as api from './services/api.ts';
 import * as cloudSync from './services/cloud-sync.ts';
+import * as adminApi from './services/admin-api.ts';
+
+// Heavy, less frequently used modules are loaded on demand for faster mobile startup.
+const AIAssistantView = React.lazy(() => import('./components/views/AIAssistantView.tsx').then((module) => ({ default: module.AIAssistantView })));
+const GoogleMapsView = React.lazy(() => import('./components/views/GoogleMapsView.tsx').then((module) => ({ default: module.GoogleMapsView })));
+const GoogleWorkspaceView = React.lazy(() => import('./components/views/GoogleWorkspaceView.tsx').then((module) => ({ default: module.GoogleWorkspaceView })));
 import {
   getOfflineMembersQueue,
   addMemberToOfflineQueue,
   syncOfflineQueueToServer,
   cacheMembersLocally,
   getCachedMembersLocally,
-  clearOfflineQueue,
-  clearCachedMembersLocally,
+  getOfflineMemberPhotos,
+  cacheMemberPhotoOffline,
+  removeOfflineMemberPhoto,
+  syncOfflineMemberPhotos,
+  getOfflineDataSnapshot,
+  cacheOfflineDataSnapshot,
 } from './utils/offline-sync.ts';
 import type {
   Member,
@@ -70,7 +77,6 @@ import type {
   DataCorrectionRequest,
   AuditLog,
   User,
-  UserRole,
 } from './types/index.ts';
 
 export default function App() {
@@ -78,7 +84,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('sysjeger_user');
-      return saved ? JSON.parse(saved) : null;
+      // A stored profile without a server session is only stale display data;
+      // never treat it as an authenticated administrator.
+      return saved && api.getAuthToken() ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
@@ -105,6 +113,7 @@ export default function App() {
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [showSacramentModal, setShowSacramentModal] = useState(false);
   const [sacramentType, setSacramentType] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
+  const [editingSacrament, setEditingSacrament] = useState<any | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPrintReportModal, setShowPrintReportModal] = useState(false);
   const [showKoboExportModal, setShowKoboExportModal] = useState(false);
@@ -147,9 +156,13 @@ export default function App() {
 
   // Load all data from API with Auto-Sync & Promise.allSettled Resilience
   const loadAllData = async () => {
+    // Retry pending member photos as well as queued member records.
+    if (currentUser && Object.keys(getOfflineMemberPhotos()).length > 0 && navigator.onLine) {
+      await syncOfflineMemberPhotos(api.updateMemberPhotoApi);
+    }
     // 1. Auto-sync any pending offline queue items if server is reachable
     const pendingQueue = getOfflineMembersQueue();
-    if (pendingQueue.length > 0) {
+    if (currentUser && pendingQueue.length > 0) {
       try {
         await syncOfflineQueueToServer(api.createMemberApi);
       } catch (syncErr) {
@@ -158,23 +171,43 @@ export default function App() {
     }
 
     try {
+      const offlineSnapshot = currentUser ? (getOfflineDataSnapshot() || {}) : {};
+      const isJemaat = currentUser?.role === 'Jemaat';
+      if (!currentUser) {
+        setMembers([]);
+        setFamilies([]);
+        setCorrections([]);
+      }
+      if (!currentUser || isJemaat) {
+        setStaff([]);
+        setBaptisms([]);
+        setConfirmations([]);
+        setMarriages([]);
+        setMutations([]);
+        setAttendance([]);
+        setTransactions([]);
+        setDocuments([]);
+        setAuditLogs([]);
+      }
+      const privateRequest = (request: () => Promise<any>, allowJemaat = false) =>
+        currentUser && (!isJemaat || allowJemaat) ? request() : Promise.resolve(null);
       const results = await Promise.allSettled([
         api.fetchStatsApi(),
-        api.fetchMembersApi(),
-        api.fetchFamiliesApi(),
+        privateRequest(api.fetchMembersApi, true),
+        privateRequest(api.fetchFamiliesApi, true),
         api.fetchRayonsApi(),
         api.fetchCategorialsApi(),
-        api.fetchStaffApi(),
-        api.fetchSacramentsApi(),
-        api.fetchMutationsApi(),
+        privateRequest(api.fetchStaffApi),
+        privateRequest(api.fetchSacramentsApi),
+        privateRequest(api.fetchMutationsApi),
         api.fetchEventsApi(),
         api.fetchSchedulesApi(),
-        api.fetchAttendanceApi(),
-        api.fetchFinanceApi(),
-        api.fetchDocumentsApi(),
+        privateRequest(api.fetchAttendanceApi),
+        privateRequest(api.fetchFinanceApi),
+        privateRequest(api.fetchDocumentsApi),
         api.fetchAnnouncementsApi(),
-        api.fetchCorrectionsApi(),
-        api.fetchAuditLogsApi(),
+        privateRequest(api.fetchCorrectionsApi, true),
+        privateRequest(api.fetchAuditLogsApi),
       ]);
 
       const val = (idx: number) => results[idx].status === 'fulfilled' ? (results[idx] as PromiseFulfilledResult<any>).value : null;
@@ -197,9 +230,11 @@ export default function App() {
       const auditRes = val(15);
 
       if (statsRes?.stats) setStats(statsRes.stats);
+      else if (offlineSnapshot.stats) setStats(offlineSnapshot.stats);
 
       // Handle Members: Combine server members with remaining pending offline items
-      const serverMembers: Member[] = membersRes?.members || [];
+      const pendingPhotos = getOfflineMemberPhotos();
+      const serverMembers: Member[] = (membersRes?.members || []).map((member: Member) => pendingPhotos[member.id] ? { ...member, photoUrl: pendingPhotos[member.id] } : member);
       const remainingOffline = getOfflineMembersQueue();
       const offlineItems: Member[] = remainingOffline.map((item) => ({
         id: item.id || `offline-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -245,48 +280,90 @@ export default function App() {
       }));
 
       // If server responded, synchronize state and cache accurately
-      if (results[1].status === 'fulfilled') {
+      if (currentUser && results[1].status === 'fulfilled' && membersRes) {
         const combinedMembers = [
           ...offlineItems,
           ...serverMembers.filter((sm) => !offlineItems.some((om) => om.id === sm.id)),
         ];
         setMembers(combinedMembers);
         cacheMembersLocally(combinedMembers);
-      } else {
+      } else if (currentUser) {
         // Fall back to local cached members only if server was unreachable
         const cached = getCachedMembersLocally();
         if (cached.length > 0) {
           setMembers(cached);
+        } else if (offlineSnapshot.members) {
+          setMembers(offlineSnapshot.members);
         }
       }
       setPendingOfflineCount(remainingOffline.length);
 
       if (familiesRes?.families) setFamilies(familiesRes.families);
+      else if (offlineSnapshot.families) setFamilies(offlineSnapshot.families);
       if (rayonsRes?.rayons) setRayons(rayonsRes.rayons);
+      else if (offlineSnapshot.rayons) setRayons(offlineSnapshot.rayons);
       if (catRes?.categorials) setCategorials(catRes.categorials);
+      else if (offlineSnapshot.categorials) setCategorials(offlineSnapshot.categorials);
       if (staffRes?.staff) setStaff(staffRes.staff);
+      else if (offlineSnapshot.staff) setStaff(offlineSnapshot.staff);
       if (sacramentsRes) {
         setBaptisms(sacramentsRes.baptisms || []);
         setConfirmations(sacramentsRes.confirmations || []);
         setMarriages(sacramentsRes.marriages || []);
+      } else if (offlineSnapshot.baptisms) {
+        setBaptisms(offlineSnapshot.baptisms);
+        setConfirmations(offlineSnapshot.confirmations || []);
+        setMarriages(offlineSnapshot.marriages || []);
       }
       if (mutationsRes?.mutations) setMutations(mutationsRes.mutations);
+      else if (offlineSnapshot.mutations) setMutations(offlineSnapshot.mutations);
       if (eventsRes?.events) setEvents(eventsRes.events);
+      else if (offlineSnapshot.events) setEvents(offlineSnapshot.events);
       if (schedulesRes?.schedules) setSchedules(schedulesRes.schedules);
+      else if (offlineSnapshot.schedules) setSchedules(offlineSnapshot.schedules);
       if (attendanceRes?.attendance) setAttendance(attendanceRes.attendance);
+      else if (offlineSnapshot.attendance) setAttendance(offlineSnapshot.attendance);
       if (financeRes?.transactions) setTransactions(financeRes.transactions);
+      else if (offlineSnapshot.transactions) setTransactions(offlineSnapshot.transactions);
       if (docsRes?.documents) setDocuments(docsRes.documents);
+      else if (offlineSnapshot.documents) setDocuments(offlineSnapshot.documents);
       if (announcementsRes?.announcements) setAnnouncements(announcementsRes.announcements);
+      else if (offlineSnapshot.announcements) setAnnouncements(offlineSnapshot.announcements);
       if (correctionsRes?.corrections) setCorrections(correctionsRes.corrections);
+      else if (offlineSnapshot.corrections) setCorrections(offlineSnapshot.corrections);
       if (auditRes?.logs) setAuditLogs(auditRes.logs);
+      else if (offlineSnapshot.auditLogs) setAuditLogs(offlineSnapshot.auditLogs);
+
+      // Keep a device snapshot for offline reading. Server responses remain the
+      // source of truth whenever the connection is available.
+      if (currentUser) cacheOfflineDataSnapshot({
+        stats: statsRes?.stats || offlineSnapshot.stats || null,
+        members: results[1].status === 'fulfilled' ? [...offlineItems, ...serverMembers] : offlineSnapshot.members || getCachedMembersLocally(),
+        families: familiesRes?.families || offlineSnapshot.families || [],
+        rayons: rayonsRes?.rayons || offlineSnapshot.rayons || [],
+        categorials: catRes?.categorials || offlineSnapshot.categorials || [],
+        staff: staffRes?.staff || offlineSnapshot.staff || [],
+        baptisms: sacramentsRes?.baptisms || offlineSnapshot.baptisms || [],
+        confirmations: sacramentsRes?.confirmations || offlineSnapshot.confirmations || [],
+        marriages: sacramentsRes?.marriages || offlineSnapshot.marriages || [],
+        mutations: mutationsRes?.mutations || offlineSnapshot.mutations || [],
+        events: eventsRes?.events || offlineSnapshot.events || [],
+        schedules: schedulesRes?.schedules || offlineSnapshot.schedules || [],
+        attendance: attendanceRes?.attendance || offlineSnapshot.attendance || [],
+        transactions: financeRes?.transactions || offlineSnapshot.transactions || [],
+        documents: docsRes?.documents || offlineSnapshot.documents || [],
+        announcements: announcementsRes?.announcements || offlineSnapshot.announcements || [],
+        corrections: correctionsRes?.corrections || offlineSnapshot.corrections || [],
+        auditLogs: auditRes?.logs || offlineSnapshot.auditLogs || [],
+      });
 
       // Real-Time Cloud Firestore Sync (Ensures Vercel & GitHub persistence across instances)
       try {
         const [cloudStaff, cloudSchedules, cloudAnnouncements, cloudMembers, cloudEvents] = await Promise.all([
-          cloudSync.fetchStaffFromFirestore(),
+          currentUser && !isJemaat ? cloudSync.fetchStaffFromFirestore() : Promise.resolve([]),
           cloudSync.fetchSchedulesFromFirestore(),
           cloudSync.fetchAnnouncementsFromFirestore(),
-          cloudSync.fetchMembersFromFirestore(),
+          currentUser && !isJemaat ? cloudSync.fetchMembersFromFirestore() : Promise.resolve([]),
           cloudSync.fetchEventsFromFirestore(),
         ]);
 
@@ -345,51 +422,75 @@ export default function App() {
       if (cached.length > 0) {
         setMembers(cached);
       }
+      const snapshot = getOfflineDataSnapshot();
+      if (snapshot) {
+        if (snapshot.stats) setStats(snapshot.stats);
+        if (snapshot.families) setFamilies(snapshot.families);
+        if (snapshot.rayons) setRayons(snapshot.rayons);
+        if (snapshot.categorials) setCategorials(snapshot.categorials);
+        if (snapshot.staff) setStaff(snapshot.staff);
+        if (snapshot.events) setEvents(snapshot.events);
+        if (snapshot.schedules) setSchedules(snapshot.schedules);
+        if (snapshot.announcements) setAnnouncements(snapshot.announcements);
+        if (snapshot.attendance) setAttendance(snapshot.attendance);
+        if (snapshot.transactions) setTransactions(snapshot.transactions);
+        if (snapshot.documents) setDocuments(snapshot.documents);
+        if (snapshot.mutations) setMutations(snapshot.mutations);
+      }
     }
   };
 
   useEffect(() => {
     loadAllData();
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+      setShowPublicSite(true);
+      setCurrentView('dashboard');
+      try { localStorage.removeItem('sysjeger_user'); } catch { /* ignore */ }
+    };
+    window.addEventListener('sysjeger:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('sysjeger:unauthorized', handleUnauthorized);
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.role === 'Jemaat' && currentView !== 'portal' && currentView !== 'settings') {
+      setCurrentView('portal');
+    }
+  }, [currentUser?.role, currentView]);
 
   // Offline Sync execution handler
   const handleSyncOffline = async () => {
     if (syncingOffline) return;
     const queue = getOfflineMembersQueue();
-    if (queue.length === 0) {
-      setSyncToast({ message: 'Semua data jemaat sudah tersinkronkan dengan server.', type: 'info' });
+    const photoCount = Object.keys(getOfflineMemberPhotos()).length;
+    if (queue.length === 0 && photoCount === 0) {
+      setSyncToast({ message: 'Semua data offline sudah tersinkronkan dengan server.', type: 'info' });
+      return;
+    }
+    if (!navigator.onLine) {
+      setSyncToast({ message: 'Sinkronisasi menunggu koneksi internet.', type: 'info' });
       return;
     }
 
     setSyncingOffline(true);
-    setSyncToast({
-      message: `Sedang menyinkronkan ${queue.length} jemaat offline ke database GMIT Betel...`,
-      type: 'info',
-    });
-
+    setSyncToast({ message: `Menyinkronkan ${queue.length} data jemaat dan ${photoCount} foto...`, type: 'info' });
     try {
       const result = await syncOfflineQueueToServer(api.createMemberApi);
+      const photoResult = await syncOfflineMemberPhotos(api.updateMemberPhotoApi);
       setPendingOfflineCount(getOfflineMembersQueue().length);
       await loadAllData();
-
-      if (result.syncedCount > 0) {
-        setSyncToast({
-          message: `Berhasil menyinkronkan ${result.syncedCount} data jemaat ke database server!${
-            result.failedCount > 0 ? ` (${result.failedCount} data masih tertunda)` : ''
-          }`,
-          type: 'success',
-        });
-      } else if (result.failedCount > 0) {
-        setSyncToast({
-          message: `Gagal menyinkronkan: ${result.errors[0] || 'Koneksi internet bermasalah'}`,
-          type: 'error',
-        });
-      }
-    } catch (err: any) {
+      const failed = result.failedCount + photoResult.remainingCount;
       setSyncToast({
-        message: `Kendala sinkronisasi: ${err?.message || 'Server belum dapat dijangkau'}`,
-        type: 'error',
+        message: failed > 0
+          ? `Sinkronisasi selesai sebagian; ${failed} item masih tertunda dan akan dicoba lagi.`
+          : `Berhasil menyinkronkan ${result.syncedCount + photoResult.syncedCount} item offline ke server.`,
+        type: failed > 0 ? 'info' : 'success',
       });
+    } catch (err: any) {
+      setSyncToast({ message: `Kendala sinkronisasi: ${err?.message || 'Server belum dapat dijangkau'}`, type: 'error' });
     } finally {
       setSyncingOffline(false);
     }
@@ -404,7 +505,7 @@ export default function App() {
         type: 'success',
       });
       const pending = getOfflineMembersQueue();
-      if (pending.length > 0) {
+      if (pending.length > 0 || Object.keys(getOfflineMemberPhotos()).length > 0) {
         handleSyncOffline();
       }
     };
@@ -442,59 +543,6 @@ export default function App() {
     return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
   }, []);
 
-  // Quick switch role handler
-  const handleSwitchRole = (role: UserRole) => {
-    if (role === 'Super Admin') {
-      setCurrentUser({
-        id: 'u1',
-        username: 'superadmin',
-        name: 'Super Admin SYSJEGER',
-        role: 'Super Admin',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Admin Gereja') {
-      setCurrentUser({
-        id: 'u2',
-        username: 'admingereja',
-        name: 'Dkn. Elisabeth Lopo (Tata Usaha)',
-        role: 'Admin Gereja',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Ketua Majelis/Pendeta') {
-      setCurrentUser({
-        id: 'u3',
-        username: 'pendeta',
-        name: 'Pdt. Sonya W. Isu, S.Th (Ketua Majelis)',
-        role: 'Ketua Majelis/Pendeta',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Majelis/Rayon') {
-      setCurrentUser({
-        id: 'u4',
-        username: 'majelisrayon1',
-        name: 'Pnt. Yulius Banamtuan (Penatua R1)',
-        role: 'Majelis/Rayon',
-        rayonId: 'r1',
-        status: 'Aktif',
-      });
-      if (currentView === 'portal') setCurrentView('dashboard');
-    } else if (role === 'Jemaat') {
-      setCurrentUser({
-        id: 'u5',
-        username: 'jemaat1',
-        name: 'Yohanis Tefa (Kepala Keluarga)',
-        role: 'Jemaat',
-        memberId: 'm1',
-        rayonId: 'r1',
-        status: 'Aktif',
-      });
-      setCurrentView('portal');
-    }
-  };
-
   // Member CRUD handlers with Automatic Direct-Save & Persistence
   const handleSaveMember = async (data: Partial<Member>) => {
     try {
@@ -531,7 +579,8 @@ export default function App() {
       setEditingMember(null);
     } catch (err: any) {
       console.warn('Gagal menyimpan langsung ke server, mencadangkan ke antrean offline:', err);
-      if (!editingMember) {
+      const isOfflineFailure = !navigator.onLine || err instanceof TypeError;
+      if (!editingMember && isOfflineFailure) {
         const optimistic = addMemberToOfflineQueue(data);
         setMembers((prev) => {
           const updated = [optimistic, ...prev.filter((m) => m.id !== optimistic.id)];
@@ -547,7 +596,7 @@ export default function App() {
         setEditingMember(null);
       } else {
         setSyncToast({
-          message: `Gagal memperbarui jemaat: ${err?.message || 'Periksa koneksi jaringan server.'}`,
+          message: `${editingMember ? 'Gagal memperbarui' : 'Gagal menyimpan'} jemaat: ${err?.message || 'Periksa koneksi jaringan server.'}`,
           type: 'error',
         });
       }
@@ -562,54 +611,64 @@ export default function App() {
 
   // Direct Photo Update Handler for KAJ Cards (Linked to Firebase Storage & Database)
   const handleUpdateMemberPhoto = async (memberId: string, photoUrl: string) => {
+    // Update the printable local record first. If the network drops, the photo
+    // remains usable and is retried instead of disappearing when the modal closes.
+    setMembers((prev) => {
+      const updated = prev.map((m) => (m.id === memberId ? { ...m, photoUrl } : m));
+      cacheMembersLocally(updated);
+      return updated;
+    });
+    if (detailMember && detailMember.id === memberId) {
+      setDetailMember({ ...detailMember, photoUrl });
+    }
+
     try {
-      await api.updateMemberPhotoApi(memberId, photoUrl);
+      const result = await api.updateMemberPhotoApi(memberId, photoUrl);
+      if (result?.success === false) throw new Error(result.message || 'Server menolak foto');
+      removeOfflineMemberPhoto(memberId);
       await cloudSync.syncMemberToFirestore({
         id: memberId,
         photoUrl,
         updatedAt: new Date().toISOString(),
       });
-      setMembers((prev) => {
-        const updated = prev.map((m) => (m.id === memberId ? { ...m, photoUrl } : m));
-        cacheMembersLocally(updated);
-        return updated;
-      });
-      if (detailMember && detailMember.id === memberId) {
-        setDetailMember({ ...detailMember, photoUrl });
-      }
       setSyncToast({
-        message: 'Foto anggota jemaat berhasil diperbarui dan tersimpan di Firebase Storage & database!',
+        message: 'Foto anggota jemaat berhasil diperbarui dan tersimpan di database serta kartu jemaat.',
         type: 'success',
       });
     } catch (err: any) {
-      console.error('Failed to update member photo in App:', err);
-      setSyncToast({
-        message: 'Foto tersimpan secara lokal dan siap dicetak pada Kartu Jemaat.',
-        type: 'info',
-      });
+      const isOfflineFailure = !navigator.onLine || err instanceof TypeError;
+      if (isOfflineFailure) {
+        cacheMemberPhotoOffline(memberId, photoUrl);
+        console.warn('Photo queued for offline synchronization:', err);
+        setSyncToast({
+          message: 'Foto tersimpan pada perangkat dan kartu jemaat. Sinkronisasi server akan diulang saat online.',
+          type: 'info',
+        });
+      } else {
+        setSyncToast({
+          message: `Foto belum tersimpan di server: ${err?.message || 'Permintaan ditolak.'}`,
+          type: 'error',
+        });
+      }
     }
   };
 
-  // Super Admin Purge Sample / Dummy Data
+  // Super Admin: remove only the explicitly identified legacy demo records.
   const handlePurgeAllSampleData = async () => {
-    if (!confirm('Apakah Anda yakin ingin menghapus seluruh data contoh dalam aplikasi ini? Tindakan ini akan mengosongkan data jemaat, kartu keluarga, jadwal, transaksi contoh agar database bersih untuk data nyata GMIT Betel.')) {
+    if (currentUser?.role !== 'Super Admin') {
+      setSyncToast({ message: 'Hanya Super Admin yang dapat membersihkan data contoh.', type: 'error' });
       return;
     }
+    if (!window.confirm('Hapus data contoh lama yang teridentifikasi? Data riil dan data yang Anda masukkan sendiri tidak akan dihapus.')) return;
     try {
-      await api.purgeSampleDataApi();
-      clearOfflineQueue();
-      clearCachedMembersLocally();
+      const result = await api.purgeSampleDataApi();
+      if (result?.success === false) throw new Error(result.message || 'Pembersihan ditolak server');
+      // Keep pending offline records: they may contain real data entered by
+      // the operator and are not part of the legacy demo cleanup.
       await loadAllData();
-      setSyncToast({
-        message: 'Seluruh data contoh berhasil dibersihkan! Database GMIT Betel kini bersih dan siap diisi data riil.',
-        type: 'success',
-      });
+      setSyncToast({ message: 'Data contoh lama berhasil dibersihkan tanpa mengosongkan data riil.', type: 'success' });
     } catch (err: any) {
-      console.error('Error purging sample data:', err);
-      setSyncToast({
-        message: 'Gagal membersihkan data contoh: ' + (err?.message || 'Kesalahan server'),
-        type: 'error',
-      });
+      setSyncToast({ message: `Gagal membersihkan data contoh: ${err?.message || 'Kesalahan server'}`, type: 'error' });
     }
   };
 
@@ -701,9 +760,51 @@ export default function App() {
     await loadAllData();
   };
 
+  const handleUpdateSacrament = async (type: 'baptis' | 'sidi' | 'nikah', id: string, data: any) => {
+    await adminApi.updateSacramentApi(type, id, data);
+    await loadAllData();
+  };
+
   // Mutation handler
   const handleAddMutation = async (data: Partial<MutationRecord>) => {
     await api.createMutationApi(data);
+    await loadAllData();
+  };
+
+  const handleUpdateMutation = async (id: string, data: Partial<MutationRecord>) => {
+    await adminApi.updateMutationApi(id, data);
+    await loadAllData();
+  };
+
+  const handleDeleteMutation = async (id: string) => {
+    await adminApi.deleteMutationApi(id);
+    await loadAllData();
+  };
+
+  // Super Admin structure controls (rayon and kategorial)
+  const handleSaveRayon = async (data: Partial<Rayon>, id?: string) => {
+    if (currentUser?.role !== 'Super Admin') throw new Error('Hanya Super Admin yang dapat mengubah struktur rayon.');
+    if (id) await adminApi.updateRayonApi(id, data);
+    else await adminApi.createRayonApi(data);
+    await loadAllData();
+  };
+
+  const handleDeleteRayon = async (id: string) => {
+    if (currentUser?.role !== 'Super Admin') throw new Error('Hanya Super Admin yang dapat menghapus rayon.');
+    await adminApi.deleteRayonApi(id);
+    await loadAllData();
+  };
+
+  const handleSaveCategorial = async (data: Partial<CategorialGroup>, id?: string) => {
+    if (currentUser?.role !== 'Super Admin') throw new Error('Hanya Super Admin yang dapat mengubah kategorial.');
+    if (id) await adminApi.updateCategorialApi(id, data);
+    else await adminApi.createCategorialApi(data);
+    await loadAllData();
+  };
+
+  const handleDeleteCategorial = async (id: string) => {
+    if (currentUser?.role !== 'Super Admin') throw new Error('Hanya Super Admin yang dapat menghapus kategorial.');
+    await adminApi.deleteCategorialApi(id);
     await loadAllData();
   };
 
@@ -723,6 +824,19 @@ export default function App() {
       imageUrl: data.imageUrl || '',
     };
     await cloudSync.syncEventToFirestore(newEvent);
+    await loadAllData();
+  };
+
+  const handleUpdateEvent = async (id: string, data: Partial<ChurchEvent>) => {
+    await api.updateEventApi(id, data);
+    const existing = events.find((event) => event.id === id);
+    if (existing) await cloudSync.syncEventToFirestore({ ...existing, ...data, id });
+    await loadAllData();
+  };
+
+  const handleDeleteEvent = async (id: string) => {
+    await api.deleteEventApi(id);
+    await cloudSync.deleteEventFromFirestore(id);
     await loadAllData();
   };
 
@@ -780,6 +894,16 @@ export default function App() {
     await loadAllData();
   };
 
+  const handleUpdateAttendance = async (id: string, data: Partial<AttendanceRecord>) => {
+    await adminApi.updateAttendanceApi(id, data);
+    await loadAllData();
+  };
+
+  const handleDeleteAttendance = async (id: string) => {
+    await adminApi.deleteAttendanceApi(id);
+    await loadAllData();
+  };
+
   // Finance handler
   const handleAddFinance = async (data: Partial<FinancialTransaction>) => {
     await api.createFinanceApi(data);
@@ -791,9 +915,24 @@ export default function App() {
     await loadAllData();
   };
 
+  const handleUpdateFinance = async (id: string, data: Partial<FinancialTransaction>) => {
+    await adminApi.updateFinanceApi(id, data);
+    await loadAllData();
+  };
+
   // Document handler
   const handleAddDocument = async (data: Partial<DocumentRecord>) => {
     await api.createDocumentApi(data);
+    await loadAllData();
+  };
+
+  const handleUpdateDocument = async (id: string, data: Partial<DocumentRecord>) => {
+    await adminApi.updateDocumentApi(id, data);
+    await loadAllData();
+  };
+
+  const handleDeleteDocument = async (id: string) => {
+    await adminApi.deleteDocumentApi(id);
     await loadAllData();
   };
 
@@ -835,7 +974,7 @@ export default function App() {
 
   // Correction request handler
   const handleSubmitCorrection = async (details: string) => {
-    const mem = members.find((m) => m.id === currentUser?.memberId) || members[0];
+    const mem = currentUser?.memberId ? members.find((m) => m.id === currentUser.memberId) : null;
     if (mem) {
       await api.createCorrectionApi({
         memberId: mem.id,
@@ -847,7 +986,8 @@ export default function App() {
   };
 
   // Login & Logout authentication handlers
-  const handleLoginSuccess = (user: User) => {
+  const handleLoginSuccess = (user: User, token?: string) => {
+    if (token) api.setAuthToken(token);
     try {
       localStorage.setItem('sysjeger_user', JSON.stringify(user));
     } catch {
@@ -864,6 +1004,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    api.clearAuthToken();
     try {
       localStorage.removeItem('sysjeger_user');
     } catch {
@@ -882,7 +1023,9 @@ export default function App() {
   };
 
   // Active member for Portal
-  const activePortalMember = members.find((m) => m.id === currentUser?.memberId) || members[0] || null;
+  const activePortalMember = currentUser?.memberId
+    ? members.find((m) => m.id === currentUser.memberId) || null
+    : null;
   const activePortalFamily = activePortalMember ? families.find((f) => f.id === activePortalMember.familyId) || null : null;
   const activePortalFamilyMembers = activePortalFamily ? members.filter((m) => m.familyId === activePortalFamily.id) : [];
 
@@ -904,8 +1047,8 @@ export default function App() {
           events={events}
           schedules={schedules}
           stats={stats}
-          members={members}
-          families={families}
+          members={currentUser && currentUser.role !== 'Jemaat' ? members : []}
+          families={currentUser && currentUser.role !== 'Jemaat' ? families : []}
           rayons={rayons}
           categorials={categorials}
           currentUser={currentUser}
@@ -922,7 +1065,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070b18] text-slate-100 flex flex-col font-sans">
+    <div className="chroma-app min-h-screen text-slate-100 flex flex-col font-sans">
+      <div className="chroma-ribbon" aria-hidden="true" />
       {mapsQuotaExceeded && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
           <span>
@@ -958,7 +1102,6 @@ export default function App() {
           currentUser={currentUser}
           onOpenMobileSidebar={() => setIsOpenMobileSidebar(true)}
           onOpenPublicSite={() => setShowPublicSite(true)}
-          onSwitchRole={handleSwitchRole}
           onLogout={handleLogout}
           isOnline={isOnline}
           pendingOfflineCount={pendingOfflineCount}
@@ -967,6 +1110,7 @@ export default function App() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <React.Suspense fallback={<div className="chroma-card p-8 rounded-2xl text-center text-sm text-cyan-200">Memuat modul pelayanan…</div>}>
           {currentView === 'dashboard' && (
             <DashboardView
               stats={stats}
@@ -1058,6 +1202,12 @@ export default function App() {
               rayons={rayons}
               categorials={categorials}
               members={members}
+              initialTab="rayons"
+              canManage={currentUser?.role === 'Super Admin'}
+              onSaveRayon={handleSaveRayon}
+              onDeleteRayon={handleDeleteRayon}
+              onSaveCategorial={handleSaveCategorial}
+              onDeleteCategorial={handleDeleteCategorial}
               onSelectMember={(m) => {
                 setDetailMember(m);
                 setShowMemberDetailModal(true);
@@ -1077,6 +1227,12 @@ export default function App() {
               rayons={rayons}
               categorials={categorials}
               members={members}
+              initialTab="categorials"
+              canManage={currentUser?.role === 'Super Admin'}
+              onSaveRayon={handleSaveRayon}
+              onDeleteRayon={handleDeleteRayon}
+              onSaveCategorial={handleSaveCategorial}
+              onDeleteCategorial={handleDeleteCategorial}
               onSelectMember={(m) => {
                 setDetailMember(m);
                 setShowMemberDetailModal(true);
@@ -1102,17 +1258,25 @@ export default function App() {
               members={members}
               onOpenAddBaptism={() => {
                 setSacramentType('baptis');
+                setEditingSacrament(null);
                 setShowSacramentModal(true);
               }}
               onOpenAddConfirmation={() => {
                 setSacramentType('sidi');
+                setEditingSacrament(null);
                 setShowSacramentModal(true);
               }}
               onOpenAddMarriage={() => {
                 setSacramentType('nikah');
+                setEditingSacrament(null);
                 setShowSacramentModal(true);
               }}
               onDeleteSacrament={handleDeleteSacrament}
+              onEditSacrament={(type, record) => {
+                setSacramentType(type);
+                setEditingSacrament(record);
+                setShowSacramentModal(true);
+              }}
               onPrintCertificate={(type, record) => {
                 setReportType('sacraments');
                 setShowPrintReportModal(true);
@@ -1126,6 +1290,8 @@ export default function App() {
               members={members}
               rayons={rayons}
               onAddMutation={handleAddMutation}
+              onUpdateMutation={handleUpdateMutation}
+              onDeleteMutation={handleDeleteMutation}
             />
           )}
 
@@ -1134,6 +1300,8 @@ export default function App() {
               events={events}
               schedules={schedules}
               onAddEvent={handleAddEvent}
+              onUpdateEvent={handleUpdateEvent}
+              onDeleteEvent={handleDeleteEvent}
               onAddSchedule={handleAddSchedule}
               onUpdateSchedule={handleUpdateSchedule}
               onDeleteSchedule={handleDeleteSchedule}
@@ -1149,6 +1317,8 @@ export default function App() {
             <AttendanceView
               attendance={attendance}
               onAddAttendance={handleAddAttendance}
+              onUpdateAttendance={handleUpdateAttendance}
+              onDeleteAttendance={handleDeleteAttendance}
               onOpenPrintReport={() => {
                 setReportType('attendance');
                 setShowPrintReportModal(true);
@@ -1160,6 +1330,7 @@ export default function App() {
             <FinanceView
               transactions={transactions}
               onAddTransaction={handleAddFinance}
+              onUpdateTransaction={handleUpdateFinance}
               onDeleteTransaction={handleDeleteFinance}
               onOpenPrintReport={() => {
                 setReportType('finance');
@@ -1172,6 +1343,8 @@ export default function App() {
             <DocumentsView
               documents={documents}
               onAddDocument={handleAddDocument}
+              onUpdateDocument={handleUpdateDocument}
+              onDeleteDocument={handleDeleteDocument}
             />
           )}
 
@@ -1205,7 +1378,7 @@ export default function App() {
             />
           )}
 
-          {currentView === 'portal' && activePortalMember && (
+          {currentView === 'portal' && (activePortalMember ? (
             <JemaatPortalView
               currentMember={activePortalMember}
               family={activePortalFamily}
@@ -1218,13 +1391,19 @@ export default function App() {
                 setShowMemberDetailModal(true);
               }}
             />
-          )}
+          ) : (
+            <div className="chroma-card max-w-xl mx-auto p-8 rounded-2xl text-center space-y-3">
+              <h2 className="text-lg font-bold text-white">Portal Jemaat</h2>
+              <p className="text-sm text-slate-400">Akun ini belum terhubung ke data diri jemaat. Hubungi Tata Usaha untuk menautkan akun Anda; data jemaat lain tidak ditampilkan.</p>
+            </div>
+          ))}
 
           {currentView === 'settings' && (
             <SettingsView
               onNavigateToBackup={() => setCurrentView('backup')}
               onPurgeSampleData={handlePurgeAllSampleData}
-              isSuperAdmin={currentUser?.role === 'Super Admin' || currentUser?.email === 'aprryviken@gmail.com'}
+              isSuperAdmin={currentUser?.role === 'Super Admin'}
+              currentUser={currentUser}
             />
           )}
 
@@ -1239,6 +1418,7 @@ export default function App() {
               logs={auditLogs}
             />
           )}
+          </React.Suspense>
         </main>
       </div>
 
@@ -1286,8 +1466,10 @@ export default function App() {
       <SacramentModal
         isOpen={showSacramentModal}
         type={sacramentType}
-        onClose={() => setShowSacramentModal(false)}
+        onClose={() => { setShowSacramentModal(false); setEditingSacrament(null); }}
         members={members}
+        editingRecord={editingSacrament}
+        onUpdateSacrament={handleUpdateSacrament}
         onSaveBaptism={handleSaveBaptism}
         onSaveConfirmation={handleSaveConfirmation}
         onSaveMarriage={handleSaveMarriage}
@@ -1323,6 +1505,7 @@ export default function App() {
         onClose={() => setShowWartaPdfModal(false)}
         transactions={transactions}
         members={members}
+        rayons={rayons}
       />
 
       {/* Floating Offline & Sync Notification Toast */}

@@ -47,6 +47,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
+  const isCongregant = currentUser?.role === 'Jemaat';
+
   const menuSections = [
     {
       title: 'UTAMA',
@@ -91,6 +93,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  const visibleSections = isCongregant
+    ? menuSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => item.id === 'portal' || item.id === 'settings'),
+        }))
+        .filter((section) => section.items.length > 0)
+    : menuSections;
+
   return (
     <>
       {/* Mobile backdrop */}
@@ -102,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col w-72 bg-[#090e1d] border-r border-amber-500/20 text-slate-300 transition-transform duration-200 lg:translate-x-0 ${
+        className={`chroma-sidebar fixed top-0 bottom-0 left-0 z-50 flex flex-col w-72 border-r text-slate-300 transition-transform duration-200 lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -110,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center gap-3 px-5 py-5 border-b border-amber-500/20 bg-[#060a16]">
           <div className="relative w-11 h-11 shrink-0 rounded-full overflow-hidden border border-amber-400/40 bg-slate-900 shadow-md">
             <img
-              src="/src/assets/images/regenerated_image_1792510154483.png"
+              src="/images/regenerated_image_1792510154483.png"
               alt="GMIT Betel Fuimelang"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -131,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation links */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-800">
-          {menuSections.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.title} className="space-y-1">
               <div className="px-3 text-[10px] font-bold tracking-wider text-amber-500/80 uppercase">
                 {section.title}

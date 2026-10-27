@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Award, Heart, Plus, Search, Printer, CheckCircle2, Trash2 } from 'lucide-react';
+import { BookOpen, Award, Heart, Plus, Search, Printer, CheckCircle2, Trash2, Edit2 } from 'lucide-react';
 import { formatDateDMY } from '../../utils/church-logic.ts';
 import type { BaptismRecord, ConfirmationRecord, MarriageRecord, Member } from '../../types/index.ts';
 
@@ -12,6 +12,7 @@ interface SacramentsViewProps {
   onOpenAddConfirmation: () => void;
   onOpenAddMarriage: () => void;
   onDeleteSacrament?: (type: 'baptis' | 'sidi' | 'nikah', id: string) => Promise<void>;
+  onEditSacrament?: (type: 'baptis' | 'sidi' | 'nikah', record: any) => void;
   onPrintCertificate: (type: string, record: any) => void;
 }
 
@@ -24,10 +25,16 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
   onOpenAddConfirmation,
   onOpenAddMarriage,
   onDeleteSacrament,
+  onEditSacrament,
   onPrintCertificate,
 }) => {
   const [activeTab, setActiveTab] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
   const [searchTerm, setSearchTerm] = useState('');
+  const query = searchTerm.trim().toLowerCase();
+  const matches = (record: any) => !query || Object.values(record).join(' ').toLowerCase().includes(query);
+  const filteredBaptisms = baptisms.filter(matches);
+  const filteredConfirmations = confirmations.filter(matches);
+  const filteredMarriages = marriages.filter(matches);
 
   return (
     <div className="space-y-6">
@@ -142,7 +149,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {baptisms.map((b) => (
+                {filteredBaptisms.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-800/40">
                     <td className="py-3 px-4 font-mono text-cyan-300 font-semibold">{b.registerNo}</td>
                     <td className="py-3 px-4 font-bold text-white">{b.memberName}</td>
@@ -155,6 +162,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{b.certificateNo}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {onEditSacrament && <button type="button" onClick={() => onEditSacrament('baptis', b)} className="p-1.5 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800" title="Ubah catatan sakramen"><Edit2 className="w-3.5 h-3.5" /></button>}
                         <button
                           onClick={() => onPrintCertificate('baptis', b)}
                           className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold transition-colors"
@@ -201,7 +209,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {confirmations.map((c) => (
+                {filteredConfirmations.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-800/40">
                     <td className="py-3 px-4 font-mono text-amber-300 font-semibold">{c.registerNo}</td>
                     <td className="py-3 px-4 font-bold text-white">{c.memberName}</td>
@@ -214,6 +222,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{c.certificateNo}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {onEditSacrament && <button type="button" onClick={() => onEditSacrament('sidi', c)} className="p-1.5 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800" title="Ubah catatan sakramen"><Edit2 className="w-3.5 h-3.5" /></button>}
                         <button
                           onClick={() => onPrintCertificate('sidi', c)}
                           className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition-colors"
@@ -260,7 +269,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {marriages.map((m) => (
+                {filteredMarriages.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-800/40">
                     <td className="py-3 px-4 font-mono text-emerald-300 font-semibold">{m.registerNo}</td>
                     <td className="py-3 px-4">
@@ -276,6 +285,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{m.certificateNo}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {onEditSacrament && <button type="button" onClick={() => onEditSacrament('nikah', m)} className="p-1.5 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800" title="Ubah catatan sakramen"><Edit2 className="w-3.5 h-3.5" /></button>}
                         <button
                           onClick={() => onPrintCertificate('nikah', m)}
                           className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition-colors"

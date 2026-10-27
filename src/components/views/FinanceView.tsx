@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Printer, Download, Search, CheckCircle2, Trash2 } from 'lucide-react';
+import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Printer, Download, Search, CheckCircle2, Trash2, Edit2, X } from 'lucide-react';
 import { formatRupiah, formatDateDMY } from '../../utils/church-logic.ts';
 import type { FinancialTransaction } from '../../types/index.ts';
 
 interface FinanceViewProps {
   transactions: FinancialTransaction[];
   onAddTransaction: (data: Partial<FinancialTransaction>) => Promise<void>;
+  onUpdateTransaction?: (id: string, data: Partial<FinancialTransaction>) => Promise<void>;
   onDeleteTransaction?: (id: string) => Promise<void>;
   onOpenPrintReport: () => void;
 }
@@ -13,18 +14,21 @@ interface FinanceViewProps {
 export const FinanceView: React.FC<FinanceViewProps> = ({
   transactions,
   onAddTransaction,
+  onUpdateTransaction,
   onDeleteTransaction,
   onOpenPrintReport,
 }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<FinancialTransaction | null>(null);
+  const [error, setError] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Form states
-  const [txDate, setTxDate] = useState('18-10-2026');
+  const [txDate, setTxDate] = useState(new Date().toLocaleDateString('id-ID').split('/').join('-'));
   const [type, setType] = useState<'Pemasukan' | 'Pengeluaran'>('Pemasukan');
   const [category, setCategory] = useState<any>('Kolekte Ibadah Minggu');
-  const [amount, setAmount] = useState<number>(1000000);
+  const [amount, setAmount] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -47,23 +51,49 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     );
   });
 
+  const openAdd = () => {
+    setEditing(null);
+    setTxDate(new Date().toLocaleDateString('id-ID').split('/').join('-'));
+    setType('Pemasukan');
+    setCategory('Kolekte Ibadah Minggu');
+    setAmount(0);
+    setDescription('');
+    setError('');
+    setShowModal(true);
+  };
+
+  const openEdit = (transaction: FinancialTransaction) => {
+    setEditing(transaction);
+    setTxDate(transaction.txDate);
+    setType(transaction.type);
+    setCategory(transaction.category);
+    setAmount(transaction.amount);
+    setDescription(transaction.description);
+    setError('');
+    setShowModal(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || amount <= 0) return;
     setSaving(true);
+    setError('');
+    const payload: Partial<FinancialTransaction> = {
+      txDate,
+      type,
+      category,
+      amount: Number(amount),
+      description: description.trim() || `${type} ${category}`,
+      recordedBy: editing?.recordedBy || 'Bendahara Jemaat',
+    };
     try {
-      await onAddTransaction({
-        txDate,
-        type,
-        category,
-        amount: Number(amount),
-        description: description || `${type} ${category}`,
-        recordedBy: 'Bendahara Jemaat / Dkn. Samuel Blegur',
-      });
+      if (editing && onUpdateTransaction) await onUpdateTransaction(editing.id, payload);
+      else await onAddTransaction(payload);
       setShowModal(false);
+      setEditing(null);
       setDescription('');
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setError(err?.message || 'Transaksi tidak dapat disimpan.');
     } finally {
       setSaving(false);
     }
@@ -106,7 +136,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowModal(true)}
+            onClick={openAdd}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -203,7 +233,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <th className="py-3 px-4">Uraian / Deskripsi</th>
                 <th className="py-3 px-4 text-right">Jumlah (Rp)</th>
                 <th className="py-3 px-4">Pencatat</th>
-                {onDeleteTransaction && <th className="py-3 px-4 text-right">Aksi</th>}
+                {(onUpdateTransaction || onDeleteTransaction) && <th className="py-3 px-4 text-right">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -221,20 +251,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-400 text-[11px]">{t.recordedBy}</td>
-                  {onDeleteTransaction && (
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(`Hapus catatan transaksi ${t.txNo} (${t.category})?`)) {
-                            onDeleteTransaction(t.id);
-                          }
-                        }}
-                        className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
-                        title="Hapus transaksi kas"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                  {(onUpdateTransaction || onDeleteTransaction) && (
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      {onUpdateTransaction && <button type="button" onClick={() => openEdit(t)} className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800" title="Ubah transaksi kas"><Edit2 className="w-3.5 h-3.5" /></button>}
+                      {onDeleteTransaction && <button type="button" onClick={() => { if (confirm(`Hapus catatan transaksi ${t.txNo} (${t.category})?`)) void onDeleteTransaction(t.id); }} className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800" title="Hapus transaksi kas"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </td>
                   )}
                 </tr>
@@ -248,10 +268,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
-            <h3 className="text-base font-bold text-amber-300">
-              Input Transaksi Kas Gereja
-            </h3>
-
+            <div className="flex items-center justify-between"><h3 className="text-base font-bold text-amber-300">{editing ? 'Ubah Transaksi Kas Gereja' : 'Input Transaksi Kas Gereja'}</h3><button type="button" onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-white" aria-label="Tutup"><X className="w-4 h-4" /></button></div>
+            {error && <div role="alert" className="p-2 rounded-lg bg-rose-950/60 text-rose-200">{error}</div>}
             <form onSubmit={handleSave} className="space-y-3">
               <div>
                 <label className="block font-semibold text-slate-300 mb-1">Tanggal Transaksi (DD-MM-YYYY) *</label>

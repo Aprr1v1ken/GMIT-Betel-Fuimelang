@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   FileText,
@@ -22,14 +22,14 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import { formatRupiah } from '../utils/church-logic.ts';
-import type { FinancialTransaction, Member } from '../types/index.ts';
+import type { FinancialTransaction, Member, Rayon } from '../types/index.ts';
 
 interface WartaPdfModalProps {
   isOpen: boolean;
   onClose: () => void;
   transactions?: FinancialTransaction[];
   members?: Member[];
+  rayons?: Rayon[];
 }
 
 export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
@@ -37,6 +37,7 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
   onClose,
   transactions = [],
   members = [],
+  rayons = [],
 }) => {
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'whatsapp'>('preview');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -44,7 +45,7 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
 
   // Warta Jemaat Content State
   const [wartaTitle, setWartaTitle] = useState('WARTA JEMAAT MINGGU');
-  const [wartaEdition, setWartaEdition] = useState('Minggu XXI Setelah Pentakosta');
+  const [wartaEdition, setWartaEdition] = useState('');
   const [wartaDate, setWartaDate] = useState(() => {
     const today = new Date();
     // Default to coming Sunday or today
@@ -54,8 +55,8 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
     return sunday.toISOString().substring(0, 10);
   });
 
-  const [scriptureTheme, setScriptureTheme] = useState('Tuhan Gembala Yang Baik dan Memelihara Umat-Nya');
-  const [scriptureText, setScriptureText] = useState('Mazmur 23:1-6 & Yohanes 10:11-16');
+  const [scriptureTheme, setScriptureTheme] = useState('');
+  const [scriptureText, setScriptureText] = useState('');
   
   // Officers
   const [preacher, setPreacher] = useState('');
@@ -66,27 +67,36 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
   const [songLeader, setSongLeader] = useState('');
 
   // Bulletin Points
-  const [announcements, setAnnouncements] = useState<string[]>([
-    'Ibadah Minggu Pagi dimulai tepat pkl 08.00 WITA. Jemaat dimohon hadir 15 menit sebelum ibadah dimulai dengan tetap menjaga ketertiban ruang ibadah.',
-    'Ibadah Persekutuan Doa Rayon I s/d IV serentak dilaksanakan pada hari Rabu, pkl 17.00 WITA di rumah keluarga yang telah dijadwalkan masing-masing Rayon.',
-    'Pembersihan lingkungan Gedung Gereja Betel Fuimelang oleh Persekutuan Kaum Bapak (PKB) dan Pemuda (GP GMIT) pada hari Sabtu pkl 07.00 WITA.',
-    'Persiapan Sakramen Baptisan Kudus Anak akan dilaksanakan pada hari Jumat pkl 16.00 WITA di Pastori. Orang tua dan saksi wajib hadir.',
-    'Dukungan doa syafaat bagi anggota jemaat yang sedang dalam pemulihan kesehatan di rumah maupun RSUD Kalabahi.',
-  ]);
+  const [announcements, setAnnouncements] = useState<string[]>([]);
   const [newAnnouncement, setNewAnnouncement] = useState('');
 
-  // Rayon Service Schedules
-  const [rayonSchedules, setRayonSchedules] = useState([
-    { rayon: 'Rayon I (Pusat & Pasar Lama)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
-    { rayon: 'Rayon II (Kompleks SD Betel & Liku)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
-    { rayon: 'Rayon III (Fuimelang Atas & Kebun Sirih)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
-    { rayon: 'Rayon IV (Pesisir Pantai & Dermaga Moru)', day: 'Rabu, 17.00 WITA', host: '', leader: '' },
-  ]);
+  // Rayon rows are based on live administrative data, not sample schedules.
+  const [rayonSchedules, setRayonSchedules] = useState<Array<{ rayon: string; day: string; host: string; leader: string }>>([]);
+
+  useEffect(() => {
+    if (rayonSchedules.length === 0 && rayons.length > 0) {
+      setRayonSchedules(rayons.map((rayon) => ({
+        rayon: `${rayon.name}${rayon.coverageArea ? ` (${rayon.coverageArea})` : ''}`,
+        day: '',
+        host: '',
+        leader: rayon.leaderName || '',
+      })));
+    }
+  }, [rayons, rayonSchedules.length]);
 
   // Financial Summary
-  const [incomeAmount, setIncomeAmount] = useState('3.850.000');
-  const [expenseAmount, setExpenseAmount] = useState('850.000');
-  const [endingBalance, setEndingBalance] = useState('14.420.000');
+  const [incomeAmount, setIncomeAmount] = useState('0');
+  const [expenseAmount, setExpenseAmount] = useState('0');
+  const [endingBalance, setEndingBalance] = useState('0');
+
+  useEffect(() => {
+    const income = transactions.filter((tx) => tx.type === 'Pemasukan').reduce((sum, tx) => sum + tx.amount, 0);
+    const expense = transactions.filter((tx) => tx.type === 'Pengeluaran').reduce((sum, tx) => sum + tx.amount, 0);
+    const formatNumber = (value: number) => new Intl.NumberFormat('id-ID').format(value);
+    setIncomeAmount(formatNumber(income));
+    setExpenseAmount(formatNumber(expense));
+    setEndingBalance(formatNumber(income - expense));
+  }, [isOpen, transactions]);
 
   // Ref for PDF Capture
   const pdfPrintRef = useRef<HTMLDivElement>(null);
@@ -174,7 +184,8 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
     });
     msg += `\n`;
 
-    msg += `🏠 *JADWAL IBADAH RAYON (Rabu, 17.00 WITA):*\n`;
+    msg += `🏠 *JADWAL IBADAH RAYON:*\n`;
+    if (rayonSchedules.length === 0) msg += `Belum ada jadwal rayon yang dicatat.\n`;
     rayonSchedules.forEach((r) => {
       msg += `• *${r.rayon}*\n   Tempat: ${r.host} (Pelayan: ${r.leader})\n`;
     });
@@ -416,7 +427,7 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
                     <div className="mb-4">
                       <div className="border-b border-slate-800 pb-1 mb-2">
                         <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-900">
-                          II. JADWAL IBADAH RAYON I S/D IV (PERSEKUTUAN DOA)
+                          II. JADWAL IBADAH RAYON (PERSEKUTUAN DOA)
                         </h4>
                       </div>
                       <table className="w-full text-left text-[9.5px] border-collapse">
@@ -429,6 +440,7 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
+                          {rayonSchedules.length === 0 && <tr><td colSpan={4} className="py-2 px-2 text-slate-500 italic">Belum ada jadwal rayon yang dicatat.</td></tr>}
                           {rayonSchedules.map((r, i) => (
                             <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                               <td className="py-1 px-2 font-semibold text-slate-900">{r.rayon}</td>
@@ -630,7 +642,23 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
                 </div>
               </div>
 
-              {/* Form 4: Ringkasan Kas */}
+              {/* Form 4: Jadwal Ibadah Rayon */}
+              <div className="p-5 rounded-2xl bg-[#0c142b] border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-bold text-amber-300 text-sm flex items-center gap-2"><Users className="w-4 h-4" /><span>Jadwal Ibadah Rayon</span></h4>
+                  <button onClick={() => setRayonSchedules((rows) => [...rows, { rayon: '', day: '', host: '', leader: '' }])} className="py-1.5 px-3 rounded-lg bg-amber-500 text-slate-950 font-bold flex items-center gap-1 text-[11px]"><Plus className="w-3.5 h-3.5" /> Tambah</button>
+                </div>
+                {rayonSchedules.length === 0 && <p className="text-slate-500 text-xs">Belum ada jadwal rayon. Tambahkan hanya jadwal yang telah disahkan.</p>}
+                {rayonSchedules.map((row, index) => (
+                  <div key={index} className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
+                    {(['rayon', 'day', 'host', 'leader'] as const).map((field) => (
+                      <input key={field} value={row[field]} onChange={(event) => setRayonSchedules((rows) => rows.map((item, i) => i === index ? { ...item, [field]: event.target.value } : item))} placeholder={{ rayon: 'Rayon / wilayah', day: 'Hari & waktu', host: 'Keluarga / tempat', leader: 'Pelayan' }[field]} className="px-2.5 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400" />
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {/* Form 5: Ringkasan Kas */}
               <div className="p-5 rounded-2xl bg-[#0c142b] border border-slate-800 space-y-4">
                 <h4 className="font-bold text-emerald-300 text-sm flex items-center gap-2">
                   <DollarSign className="w-4 h-4" />

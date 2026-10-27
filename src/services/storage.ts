@@ -57,7 +57,7 @@ export async function compressMemberPhoto(file: File): Promise<string> {
 
 export interface UploadMemberPhotoResult {
   url: string;
-  source: 'firebase_storage' | 'cloud_firestore' | 'compressed_data';
+  source: 'firebase_storage' | 'cloud_server' | 'compressed_data';
   storagePath?: string;
 }
 
@@ -89,7 +89,7 @@ export async function uploadMemberPhotoToFirebase(
   } catch (storageErr: any) {
     console.warn('[Firebase Storage] Could not upload directly to bucket, using cloud fallback:', storageErr?.message);
     
-    // 3. Fallback: Save to Firestore activity_images / cloud sync collection
+    // 3. Fallback: Save through the authenticated SYSJEGER image API.
     try {
       const cloudRecord = await uploadActivityImageToCloud(compressedDataUrl, {
         title: `Foto Jemaat: ${memberIdOrName || 'Anggota Jemaat'}`,
@@ -98,11 +98,11 @@ export async function uploadMemberPhotoToFirebase(
       });
       return {
         url: cloudRecord.url,
-        source: 'cloud_firestore',
+        source: 'cloud_server',
         storagePath: `firestore:activity_images/${cloudRecord.id}`,
       };
-    } catch (firestoreErr) {
-      console.warn('[Firestore] Fallback to compressed Data URL:', firestoreErr);
+    } catch (cloudErr) {
+      console.warn('[Cloud API] Fallback to compressed Data URL:', cloudErr);
       return {
         url: compressedDataUrl,
         source: 'compressed_data',

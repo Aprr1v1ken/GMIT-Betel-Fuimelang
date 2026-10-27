@@ -91,7 +91,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
   const femalePercent = totalSoul > 0 ? 100 - malePercent : 0;
 
   // Rayon counts
-  const rayonCounts: Record<string, number> = stats?.rayonCounts || {};
+  const rayonCounts: Record<string, number> = { ...(stats?.rayonCounts || {}) };
   if (Object.keys(rayonCounts).length === 0 && members.length > 0) {
     for (const m of members) {
       const r = m.rayonName || 'Rayon Lain';
@@ -100,7 +100,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
   }
 
   // Categorial counts
-  const categorialCounts: Record<string, number> = stats?.categorialCounts || {};
+  const categorialCounts: Record<string, number> = { ...(stats?.categorialCounts || {}) };
   if (Object.keys(categorialCounts).length === 0 && members.length > 0) {
     for (const m of members) {
       const c = m.categorialGroupName || 'Lainnya';
@@ -108,27 +108,40 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
     }
   }
 
+  const getCategorialCount = (code: string, aliases: string[] = []) => {
+    const direct = categorialCounts[code];
+    if (direct !== undefined) return direct;
+    const keys = [code, ...aliases].map((value) => value.toLowerCase());
+    const matchingKey = Object.keys(categorialCounts).find((key) => {
+      const normalized = key.toLowerCase();
+      return keys.some((value) => normalized.includes(value));
+    });
+    return matchingKey ? categorialCounts[matchingKey] : 0;
+  };
+
   // Sacraments summary
   const baptizedCount = stats?.sacraments?.baptized ?? members.filter((m) => m.baptismStatus === 'Sudah').length;
   const confirmedCount = stats?.sacraments?.confirmed ?? members.filter((m) => m.confirmationStatus === 'Sudah').length;
   const marriedChurchCount = stats?.sacraments?.marriedInChurch ?? members.filter((m) => m.marriageChurchStatus === 'Sudah').length;
 
   return (
-    <div className="min-h-screen bg-[#060a16] text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+    <div className="chroma-app min-h-screen text-slate-100 flex flex-col font-sans selection:bg-cyan-400 selection:text-slate-950">
+      <div className="chroma-ribbon" aria-hidden="true" />
+
       {/* Top Banner Navigation */}
-      <header className="sticky top-0 z-40 bg-[#060a16]/95 backdrop-blur-md border-b border-amber-500/20 px-4 md:px-8 py-3.5 flex items-center justify-between">
+      <header className="chroma-glass sticky top-0 z-40 border-b px-4 md:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img
-            src="/src/assets/images/regenerated_image_1792510154483.png"
+            src="/images/regenerated_image_1792510154483.png"
             alt="Emblem GMIT"
             className="w-10 h-10 rounded-full border border-amber-400/50 object-cover shadow-md shrink-0"
             referrerPolicy="no-referrer"
           />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm md:text-base font-extrabold tracking-wide text-amber-300 uppercase">
+              <div className="text-sm md:text-base font-extrabold tracking-wide text-amber-300 uppercase">
                 GMIT BETEL FUIMELANG
-              </h1>
+              </div>
               <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
                 Portal Warta & Publik
               </span>
@@ -236,12 +249,12 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
             <span>Soli Deo Gloria — Hanya Bagi Kemuliaan Allah</span>
           </div>
 
-          <h2 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+          <h1 className="chroma-hero-title text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mb-6 leading-tight">
             Gereja Masehi Injili di Timor
-            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 mt-2">
+            <span className="block mt-2">
               Jemaat Betel Fuimelang
             </span>
-          </h2>
+          </h1>
 
           <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-300 leading-relaxed mb-8">
             Membangun persekutuan jemaat yang berakar dalam Firman Allah, bertumbuh dalam kasih persaudaraan, dan berbuah dalam pelayanan kasih di Desa Lembur Tengah, Klasis Alor Tengah Utara.
@@ -358,10 +371,10 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <Layers className="w-4 h-4 text-amber-400" />
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-white">
-                4 <span className="text-xs font-normal text-slate-400">Rayon Resmi</span>
+                {rayons.length} <span className="text-xs font-normal text-slate-400">Rayon Resmi</span>
               </div>
               <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-300">
-                <span>Rayon I, Rayon II, Rayon III, Rayon IV</span>
+                <span>{rayons.length > 0 ? rayons.map((rayon) => rayon.name).join(', ') : 'Belum ada rayon terdaftar'}</span>
               </div>
               <div className="text-[10px] text-slate-400 flex items-center gap-1">
                 <MapPin className="w-3 h-3 text-emerald-400" />
@@ -376,10 +389,10 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <Heart className="w-4 h-4 text-amber-400" />
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-white">
-                5 <span className="text-xs font-normal text-slate-400">Kategorial GMIT</span>
+                {categorials.length} <span className="text-xs font-normal text-slate-400">Kategorial GMIT</span>
               </div>
               <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-300">
-                <span>PAR, Pemuda, PKP, PKB, Lansia</span>
+                <span>{categorials.length > 0 ? categorials.map((group) => group.code).join(', ') : 'Belum ada kategorial terdaftar'}</span>
               </div>
               <div className="text-[10px] text-slate-400 flex items-center gap-1">
                 <Award className="w-3 h-3 text-amber-400" />
@@ -396,7 +409,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-amber-400" />
                   <h4 className="font-bold text-white text-sm">
-                    Persebaran Jemaat Berdasarkan 4 Rayon
+                    Persebaran Jemaat Berdasarkan {rayons.length} Rayon
                   </h4>
                 </div>
                 <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
@@ -405,13 +418,8 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
               </div>
 
               <div className="space-y-3.5">
-                {[
-                  { name: 'Rayon I', key: 'Rayon I' },
-                  { name: 'Rayon II', key: 'Rayon II' },
-                  { name: 'Rayon III', key: 'Rayon III' },
-                  { name: 'Rayon IV', key: 'Rayon IV' },
-                ].map((r, idx) => {
-                  const count = rayonCounts[r.key] || rayonCounts[r.name] || 0;
+                {rayons.map((r, idx) => {
+                  const count = rayonCounts[r.name] || 0;
                   const pct = totalSoul > 0 ? Math.round((count / totalSoul) * 100) : 0;
                   return (
                     <div key={idx} className="space-y-1">
@@ -456,7 +464,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800 space-y-1">
                   <div className="text-slate-400 text-[11px] font-semibold">PAR (Anak & Remaja)</div>
                   <div className="text-lg font-bold text-amber-300">
-                    {categorialCounts['PAR'] || 0} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
+                    {getCategorialCount('PAR', ['Anak', 'Remaja'])} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
                   </div>
                   <div className="text-[10px] text-slate-400">Usia 0 - 15 Tahun</div>
                 </div>
@@ -464,7 +472,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800 space-y-1">
                   <div className="text-slate-400 text-[11px] font-semibold">Pemuda GMIT</div>
                   <div className="text-lg font-bold text-amber-300">
-                    {categorialCounts['PEMUDA'] || categorialCounts['Pemuda'] || 0} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
+                    {getCategorialCount('PEMUDA', ['Pemuda'])} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
                   </div>
                   <div className="text-[10px] text-slate-400">Usia 16 - 30 Tahun</div>
                 </div>
@@ -472,7 +480,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800 space-y-1">
                   <div className="text-slate-400 text-[11px] font-semibold">Kaum Perempuan (PKP)</div>
                   <div className="text-lg font-bold text-amber-300">
-                    {categorialCounts['PKP'] || categorialCounts['Perempuan'] || 0} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
+                    {getCategorialCount('PKP', ['Perempuan'])} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
                   </div>
                   <div className="text-[10px] text-slate-400">Ibu Rumah Tangga / Warga Dewasa</div>
                 </div>
@@ -480,7 +488,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                 <div className="p-3 rounded-xl bg-[#080d1e] border border-slate-800 space-y-1">
                   <div className="text-slate-400 text-[11px] font-semibold">Kaum Bapak (PKB)</div>
                   <div className="text-lg font-bold text-amber-300">
-                    {categorialCounts['PKB'] || categorialCounts['Bapak'] || 0} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
+                    {getCategorialCount('PKB', ['Bapak'])} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
                   </div>
                   <div className="text-[10px] text-slate-400">Kepala Keluarga / Warga Dewasa</div>
                 </div>
@@ -491,7 +499,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
                     <div className="text-[10px] text-slate-400">Usia 60 Tahun ke atas</div>
                   </div>
                   <div className="text-lg font-bold text-amber-300">
-                    {categorialCounts['LANSIA'] || categorialCounts['Lansia'] || 0} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
+                    {getCategorialCount('LANSIA', ['Lansia', 'Usia Indah'])} <span className="text-[10px] font-normal text-slate-400">jiwa</span>
                   </div>
                 </div>
               </div>
@@ -623,7 +631,7 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
           <div className="md:col-span-1 flex flex-col items-center text-center">
             <div className="w-36 h-36 rounded-2xl overflow-hidden border-2 border-amber-400/50 shadow-xl mb-4">
               <img
-                src="/src/assets/images/regenerated_image_1792335390161.png"
+                src="/images/regenerated_image_1792335390161.png"
                 alt="Pdt. Sonya W. Isu, S.Th"
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"

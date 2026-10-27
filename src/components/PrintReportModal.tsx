@@ -77,7 +77,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           <div className="flex items-center justify-between border-b-2 border-black pb-4 mb-6">
             <div className="w-20 h-20 shrink-0">
               <img
-                src="/src/assets/images/regenerated_image_1792510154483.png"
+                src="/images/regenerated_image_1792510154483.png"
                 alt="Logo GMIT"
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"

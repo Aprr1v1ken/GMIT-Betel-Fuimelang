@@ -22,12 +22,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { usePWAInstall } from '../../hooks/usePWAInstall.ts';
+import type { User } from '../../types/index.ts';
 import {
   isWebAuthnSupported,
   isPlatformBiometricAvailable,
   getRegisteredBiometricCredential,
   registerBiometricCredential,
-  clearRegisteredBiometricCredential,
+  removeRegisteredBiometricCredential,
   authenticateWithBiometrics,
   type StoredBiometricCredential,
 } from '../../utils/webauthn.ts';
@@ -36,12 +37,14 @@ interface SettingsViewProps {
   onNavigateToBackup?: () => void;
   onPurgeSampleData?: () => Promise<void>;
   isSuperAdmin?: boolean;
+  currentUser?: User | null;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onNavigateToBackup,
   onPurgeSampleData,
   isSuperAdmin = true,
+  currentUser = null,
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
@@ -54,7 +57,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [bioFeedback, setBioFeedback] = useState<{ message: string; success: boolean } | null>(null);
   const [bioTesting, setBioTesting] = useState(false);
   const [showEnrollSelector, setShowEnrollSelector] = useState(false);
-  const [enrollRole, setEnrollRole] = useState('admingereja');
 
   useEffect(() => {
     const supported = isWebAuthnSupported();
@@ -85,16 +87,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setBioTesting(true);
     setBioFeedback(null);
 
-    const userMap: Record<string, any> = {
-      admingereja: { id: 'u2', username: 'admingereja', name: 'Dkn. Elisabeth Lopo', role: 'Admin Gereja', status: 'Aktif' },
-      pendeta: { id: 'u3', username: 'pendeta', name: 'Pdt. Sonya W. Isu, S.Th', role: 'Ketua Majelis/Pendeta', status: 'Aktif' },
-      superadmin: { id: 'u1', username: 'superadmin', name: 'Super Admin SYSJEGER', role: 'Super Admin', status: 'Aktif' },
-      majelisrayon1: { id: 'u4', username: 'majelisrayon1', name: 'Pnt. Yulius Banamtuan', role: 'Majelis/Rayon', status: 'Aktif' },
-    };
+    if (!currentUser) {
+      setBioFeedback({ message: 'Masuk ke akun Anda sebelum mendaftarkan biometrik.', success: false });
+      setBioTesting(false);
+      return;
+    }
 
     try {
-      const userToRegister = userMap[enrollRole] || userMap.admingereja;
-      const res = await registerBiometricCredential(userToRegister);
+      const res = await registerBiometricCredential(currentUser);
       setBioFeedback({ message: res.message, success: res.success });
       if (res.success) {
         setSavedCredential(getRegisteredBiometricCredential());
@@ -107,10 +107,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleClearBiometrics = () => {
-    clearRegisteredBiometricCredential();
-    setSavedCredential(null);
-    setBioFeedback({ message: 'Pendaftaran biometrik berhasil dihapus dari perangkat ini.', success: true });
+  const handleClearBiometrics = async () => {
+    setBioTesting(true);
+    const result = await removeRegisteredBiometricCredential();
+    if (result.success) setSavedCredential(null);
+    setBioFeedback({ message: result.message, success: result.success });
+    setBioTesting(false);
   };
 
   const handleInstallClick = async () => {
@@ -176,7 +178,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-400/40 p-2 shrink-0 shadow-lg flex items-center justify-center">
                 <img
-                  src="/src/assets/images/regenerated_image_1792510154483.png"
+                  src="/images/regenerated_image_1792510154483.png"
                   alt="Ikon GMIT Betel Fuimelang"
                   className="w-full h-full object-contain"
                 />
@@ -477,27 +479,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </button>
                 ) : (
                   <div className="space-y-2 pt-2 border-t border-slate-800">
-                    <div className="text-[11px] text-slate-300 font-semibold">Pilih akun yang didaftarkan:</div>
-                    <div className="grid grid-cols-2 gap-1.5 text-xs">
-                      {[
-                        { id: 'admingereja', label: 'Admin Gereja', sub: 'Dkn. Elisabeth' },
-                        { id: 'pendeta', label: 'Ketua Majelis', sub: 'Pdt. Sonya W. Isu' },
-                        { id: 'superadmin', label: 'Super Admin', sub: 'Full Control' },
-                        { id: 'majelisrayon1', label: 'Majelis Rayon 1', sub: 'Pnt. Yulius' },
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => setEnrollRole(item.id)}
-                          className={`p-1.5 rounded-lg text-left text-[11px] border transition-colors ${
-                            enrollRole === item.id
-                              ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold'
-                              : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
-                          }`}
-                        >
-                          <div>{item.label}</div>
-                          <div className="text-[10px] opacity-75">{item.sub}</div>
-                        </button>
-                      ))}
+                    <div className="text-[11px] text-slate-300 font-semibold">Akun yang didaftarkan:</div>
+                    <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-xs text-slate-200">
+                      <div className="font-bold text-amber-300">{currentUser?.name || 'Akun aktif'}</div>
+                      <div className="text-[10px] text-slate-400">Peran: {currentUser?.role || '-'}</div>
                     </div>
                     <div className="flex items-center gap-2 pt-1">
                       <button

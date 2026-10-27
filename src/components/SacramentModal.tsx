@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, BookOpen, Award, Heart, Save, AlertCircle } from 'lucide-react';
 import type { Member } from '../types/index.ts';
 
@@ -10,6 +10,8 @@ interface SacramentModalProps {
   onSaveBaptism: (data: any) => Promise<void>;
   onSaveConfirmation: (data: any) => Promise<void>;
   onSaveMarriage: (data: any) => Promise<void>;
+  editingRecord?: any | null;
+  onUpdateSacrament?: (type: 'baptis' | 'sidi' | 'nikah', id: string, data: any) => Promise<void>;
 }
 
 export const SacramentModal: React.FC<SacramentModalProps> = ({
@@ -20,6 +22,8 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
   onSaveBaptism,
   onSaveConfirmation,
   onSaveMarriage,
+  editingRecord = null,
+  onUpdateSacrament,
 }) => {
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
@@ -31,52 +35,55 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setError('');
+    setSelectedMemberId(editingRecord?.memberId || '');
+    setDate(editingRecord?.baptismDate || editingRecord?.confirmationDate || editingRecord?.blessingDate || new Date().toISOString().substring(0, 10));
+    setMinister(editingRecord?.ministerName || 'Pdt. Sonya W. Isu, S.Th');
+    setChurchPlace(editingRecord?.churchPlace || 'Gedung Kebaktian GMIT Betel Fuimelang');
+    setCertificateNo(editingRecord?.certificateNo || '');
+    setExtraField1(editingRecord?.parentNames || editingRecord?.bibleVerse || editingRecord?.groomName || '');
+    setExtraField2(editingRecord?.witnesses || editingRecord?.brideName || '');
+  }, [isOpen, type, editingRecord]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError('');
-
     try {
+      let payload: any;
       if (type === 'baptis') {
         const mem = members.find((m) => m.id === selectedMemberId);
         if (!mem) throw new Error('Silakan pilih anggota jemaat');
-        await onSaveBaptism({
-          memberId: mem.id,
-          memberName: mem.fullName,
-          birthDate: mem.birthDate,
-          parentNames: extraField1 || mem.spouseName || 'Orang Tua Jemaat',
-          baptismDate: date,
-          churchPlace,
-          ministerName: minister,
+        payload = {
+          memberId: mem.id, memberName: mem.fullName, birthDate: mem.birthDate,
+          parentNames: extraField1.trim(), baptismDate: date, churchPlace, ministerName: minister,
           certificateNo: certificateNo || `SB-GMIT-BF/${new Date().getFullYear()}/${Date.now().toString().slice(-3)}`,
           witnesses: extraField2,
-        });
+        };
       } else if (type === 'sidi') {
         const mem = members.find((m) => m.id === selectedMemberId);
         if (!mem) throw new Error('Silakan pilih anggota jemaat');
-        await onSaveConfirmation({
-          memberId: mem.id,
-          memberName: mem.fullName,
-          confirmationDate: date,
-          churchPlace,
-          ministerName: minister,
+        payload = {
+          memberId: mem.id, memberName: mem.fullName, confirmationDate: date, churchPlace, ministerName: minister,
           certificateNo: certificateNo || `SS-GMIT-BF/${new Date().getFullYear()}/${Date.now().toString().slice(-3)}`,
-          bibleVerse: extraField1 || 'Yosua 1:9',
-        });
-      } else if (type === 'nikah') {
-        if (!extraField1 || !extraField2) throw new Error('Nama pengantin pria dan wanita wajib diisi');
-        await onSaveMarriage({
-          groomName: extraField1,
-          brideName: extraField2,
-          blessingDate: date,
-          churchPlace,
-          ministerName: minister,
+          bibleVerse: extraField1.trim(),
+        };
+      } else {
+        if (!extraField1.trim() || !extraField2.trim()) throw new Error('Nama pengantin pria dan wanita wajib diisi');
+        payload = {
+          groomName: extraField1.trim(), brideName: extraField2.trim(), blessingDate: date, churchPlace, ministerName: minister,
           certificateNo: certificateNo || `SN-GMIT-BF/${new Date().getFullYear()}/${Date.now().toString().slice(-3)}`,
-          witnessNames: 'Pnt. Pendamping & Saksi Keluarga',
-        });
+          witnessNames: editingRecord?.witnessNames || '',
+        };
       }
+      if (editingRecord && onUpdateSacrament) await onUpdateSacrament(type, editingRecord.id, payload);
+      else if (type === 'baptis') await onSaveBaptism(payload);
+      else if (type === 'sidi') await onSaveConfirmation(payload);
+      else await onSaveMarriage(payload);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Gagal menyimpan sakramen');
@@ -94,9 +101,9 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
             {type === 'sidi' && <Award className="w-5 h-5 text-amber-400" />}
             {type === 'nikah' && <Heart className="w-5 h-5 text-emerald-400" />}
             <h3 className="text-base font-bold text-white">
-              {type === 'baptis' && 'Pencatatan Sakramen Baptisan Kudus'}
-              {type === 'sidi' && 'Pencatatan Peneguhan Sidi (Pengakuan Iman)'}
-              {type === 'nikah' && 'Pencatatan Pemberkatan Nikah Kudus'}
+              {type === 'baptis' && (editingRecord ? 'Ubah Sakramen Baptisan Kudus' : 'Pencatatan Sakramen Baptisan Kudus')}
+              {type === 'sidi' && (editingRecord ? 'Ubah Peneguhan Sidi' : 'Pencatatan Peneguhan Sidi (Pengakuan Iman)')}
+              {type === 'nikah' && (editingRecord ? 'Ubah Pemberkatan Nikah Kudus' : 'Pencatatan Pemberkatan Nikah Kudus')}
             </h3>
           </div>
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg">
@@ -270,7 +277,7 @@ export const SacramentModal: React.FC<SacramentModalProps> = ({
               disabled={saving}
               className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
             >
-              {saving ? 'Menyimpan...' : 'Catat Sakramen'}
+              {saving ? 'Menyimpan...' : editingRecord ? 'Simpan Perubahan' : 'Catat Sakramen'}
             </button>
           </div>
         </form>

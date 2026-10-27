@@ -19,8 +19,8 @@ export default defineConfig(() => {
           name: 'SYSJEGER V2.0 — GMIT BETEL FUIMELANG',
           short_name: 'SYSJEGER',
           description: 'Sistem Informasi Manajemen Jemaat dan Gereja GMIT BETEL FUIMELANG, Desa Lembur Tengah, Klasis Alor Tengah Utara.',
-          theme_color: '#060a16',
-          background_color: '#060a16',
+          theme_color: '#09051c',
+          background_color: '#09051c',
           display: 'standalone',
           orientation: 'portrait-primary',
           start_url: '/',
@@ -50,6 +50,18 @@ export default defineConfig(() => {
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,jpeg,jpg,woff,woff2}'],
           runtimeCaching: [
+            {
+              // Only public, aggregate/content endpoints are cacheable. Never
+              // cache private member, finance, document, or audit responses.
+              urlPattern: /\/api\/(stats|events|schedules|announcements|rayons|categorials)$/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'gmit-public-api',
+                networkTimeoutSeconds: 3,
+                expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 7 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
@@ -98,10 +110,12 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {
+      // Arena's browser preview uses a generated e2b.app hostname.
+      allowedHosts: true,
       // HMR is disabled in AI Studio preview iframe environment to prevent WebSocket errors
       hmr: false,
       watch: null,

@@ -20,9 +20,37 @@ import type {
 } from '../types/index.ts';
 
 const API_BASE = '/api';
+const TOKEN_KEY = 'sysjeger_session_token';
+
+export function getAuthToken(): string | null {
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+
+export function setAuthToken(token?: string | null) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch { /* storage can be unavailable in private browsing */ }
+}
+
+export function clearAuthToken() { setAuthToken(null); }
+
+// Keep the API surface small while ensuring every request carries the same
+// server-issued session, including requests made by offline retry helpers.
+export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(input, { ...init, headers });
+  if (response.status === 401 && token && typeof window !== 'undefined') {
+    clearAuthToken();
+    window.dispatchEvent(new Event('sysjeger:unauthorized'));
+  }
+  return response;
+}
 
 export async function loginApi(username: string, password: string): Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await apiFetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
@@ -30,8 +58,59 @@ export async function loginApi(username: string, password: string): Promise<{ su
   return res.json();
 }
 
+export async function googleLoginApi(idToken: string): Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
+  const res = await apiFetch(`${API_BASE}/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+  });
+  return res.json();
+}
+
+export async function fetchSessionApi(): Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
+  const res = await apiFetch(`${API_BASE}/auth/session`);
+  return res.json();
+}
+
+export async function webAuthnRegistrationOptionsApi() {
+  const res = await apiFetch(`${API_BASE}/auth/webauthn/register-options`, { method: 'POST' });
+  return res.json();
+}
+
+export async function webAuthnRegisterApi(response: unknown, challengeToken: string) {
+  const res = await apiFetch(`${API_BASE}/auth/webauthn/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ response, challengeToken }),
+  });
+  return res.json();
+}
+
+export async function webAuthnDeleteCredentialApi(credentialId: string) {
+  const res = await apiFetch(`${API_BASE}/auth/webauthn/credentials/${encodeURIComponent(credentialId)}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function webAuthnAuthenticationOptionsApi(username: string) {
+  const res = await apiFetch(`${API_BASE}/auth/webauthn/authentication-options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  });
+  return res.json();
+}
+
+export async function webAuthnAuthenticateApi(username: string, response: unknown, challengeToken: string) {
+  const res = await apiFetch(`${API_BASE}/auth/webauthn/authenticate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, response, challengeToken }),
+  });
+  return res.json();
+}
+
 export async function fetchStatsApi() {
-  const res = await fetch(`${API_BASE}/stats`);
+  const res = await apiFetch(`${API_BASE}/stats`);
   return res.json();
 }
 
@@ -42,12 +121,12 @@ export async function fetchMembersApi(params?: { query?: string; rayonId?: strin
   if (params?.categorialId) query.set('categorialId', params.categorialId);
   if (params?.status) query.set('status', params.status);
 
-  const res = await fetch(`${API_BASE}/members?${query.toString()}`);
+  const res = await apiFetch(`${API_BASE}/members?${query.toString()}`);
   return res.json();
 }
 
 export async function createMemberApi(data: Partial<Member>) {
-  const res = await fetch(`${API_BASE}/members`, {
+  const res = await apiFetch(`${API_BASE}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -56,7 +135,7 @@ export async function createMemberApi(data: Partial<Member>) {
 }
 
 export async function updateMemberApi(id: string, data: Partial<Member>) {
-  const res = await fetch(`${API_BASE}/members/${id}`, {
+  const res = await apiFetch(`${API_BASE}/members/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -65,19 +144,19 @@ export async function updateMemberApi(id: string, data: Partial<Member>) {
 }
 
 export async function deleteMemberApi(id: string) {
-  const res = await fetch(`${API_BASE}/members/${id}`, {
+  const res = await apiFetch(`${API_BASE}/members/${id}`, {
     method: 'DELETE',
   });
   return res.json();
 }
 
 export async function fetchFamiliesApi() {
-  const res = await fetch(`${API_BASE}/families`);
+  const res = await apiFetch(`${API_BASE}/families`);
   return res.json();
 }
 
 export async function createFamilyApi(data: Partial<Family>) {
-  const res = await fetch(`${API_BASE}/families`, {
+  const res = await apiFetch(`${API_BASE}/families`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -86,7 +165,7 @@ export async function createFamilyApi(data: Partial<Family>) {
 }
 
 export async function updateFamilyApi(id: string, data: Partial<Family>) {
-  const res = await fetch(`${API_BASE}/families/${id}`, {
+  const res = await apiFetch(`${API_BASE}/families/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -95,27 +174,27 @@ export async function updateFamilyApi(id: string, data: Partial<Family>) {
 }
 
 export async function deleteFamilyApi(id: string) {
-  const res = await fetch(`${API_BASE}/families/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/families/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function fetchRayonsApi() {
-  const res = await fetch(`${API_BASE}/rayons`);
+  const res = await apiFetch(`${API_BASE}/rayons`);
   return res.json();
 }
 
 export async function fetchCategorialsApi() {
-  const res = await fetch(`${API_BASE}/categorials`);
+  const res = await apiFetch(`${API_BASE}/categorials`);
   return res.json();
 }
 
 export async function fetchStaffApi() {
-  const res = await fetch(`${API_BASE}/staff`);
+  const res = await apiFetch(`${API_BASE}/staff`);
   return res.json();
 }
 
 export async function createStaffApi(data: Partial<ChurchStaff>) {
-  const res = await fetch(`${API_BASE}/staff`, {
+  const res = await apiFetch(`${API_BASE}/staff`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -124,7 +203,7 @@ export async function createStaffApi(data: Partial<ChurchStaff>) {
 }
 
 export async function updateStaffApi(id: string, data: Partial<ChurchStaff>) {
-  const res = await fetch(`${API_BASE}/staff/${id}`, {
+  const res = await apiFetch(`${API_BASE}/staff/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -133,22 +212,22 @@ export async function updateStaffApi(id: string, data: Partial<ChurchStaff>) {
 }
 
 export async function deleteStaffApi(id: string) {
-  const res = await fetch(`${API_BASE}/staff/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/staff/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function clearAllStaffApi() {
-  const res = await fetch(`${API_BASE}/staff`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/staff`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function fetchSacramentsApi() {
-  const res = await fetch(`${API_BASE}/sacraments`);
+  const res = await apiFetch(`${API_BASE}/sacraments`);
   return res.json();
 }
 
 export async function createBaptismApi(data: Partial<BaptismRecord>) {
-  const res = await fetch(`${API_BASE}/sacraments/baptisms`, {
+  const res = await apiFetch(`${API_BASE}/sacraments/baptisms`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -157,7 +236,7 @@ export async function createBaptismApi(data: Partial<BaptismRecord>) {
 }
 
 export async function createConfirmationApi(data: Partial<ConfirmationRecord>) {
-  const res = await fetch(`${API_BASE}/sacraments/confirmations`, {
+  const res = await apiFetch(`${API_BASE}/sacraments/confirmations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -166,7 +245,7 @@ export async function createConfirmationApi(data: Partial<ConfirmationRecord>) {
 }
 
 export async function createMarriageApi(data: Partial<MarriageRecord>) {
-  const res = await fetch(`${API_BASE}/sacraments/marriages`, {
+  const res = await apiFetch(`${API_BASE}/sacraments/marriages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -175,12 +254,12 @@ export async function createMarriageApi(data: Partial<MarriageRecord>) {
 }
 
 export async function fetchMutationsApi() {
-  const res = await fetch(`${API_BASE}/mutations`);
+  const res = await apiFetch(`${API_BASE}/mutations`);
   return res.json();
 }
 
 export async function createMutationApi(data: Partial<MutationRecord>) {
-  const res = await fetch(`${API_BASE}/mutations`, {
+  const res = await apiFetch(`${API_BASE}/mutations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -189,12 +268,12 @@ export async function createMutationApi(data: Partial<MutationRecord>) {
 }
 
 export async function fetchEventsApi() {
-  const res = await fetch(`${API_BASE}/events`);
+  const res = await apiFetch(`${API_BASE}/events`);
   return res.json();
 }
 
 export async function createEventApi(data: Partial<ChurchEvent>) {
-  const res = await fetch(`${API_BASE}/events`, {
+  const res = await apiFetch(`${API_BASE}/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -203,7 +282,7 @@ export async function createEventApi(data: Partial<ChurchEvent>) {
 }
 
 export async function updateEventApi(id: string, data: Partial<ChurchEvent>) {
-  const res = await fetch(`${API_BASE}/events/${id}`, {
+  const res = await apiFetch(`${API_BASE}/events/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -212,17 +291,17 @@ export async function updateEventApi(id: string, data: Partial<ChurchEvent>) {
 }
 
 export async function deleteEventApi(id: string) {
-  const res = await fetch(`${API_BASE}/events/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/events/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function fetchSchedulesApi() {
-  const res = await fetch(`${API_BASE}/schedules`);
+  const res = await apiFetch(`${API_BASE}/schedules`);
   return res.json();
 }
 
 export async function createScheduleApi(data: Partial<ServiceSchedule>) {
-  const res = await fetch(`${API_BASE}/schedules`, {
+  const res = await apiFetch(`${API_BASE}/schedules`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -231,7 +310,7 @@ export async function createScheduleApi(data: Partial<ServiceSchedule>) {
 }
 
 export async function updateScheduleApi(id: string, data: Partial<ServiceSchedule>) {
-  const res = await fetch(`${API_BASE}/schedules/${id}`, {
+  const res = await apiFetch(`${API_BASE}/schedules/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -240,22 +319,22 @@ export async function updateScheduleApi(id: string, data: Partial<ServiceSchedul
 }
 
 export async function deleteScheduleApi(id: string) {
-  const res = await fetch(`${API_BASE}/schedules/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/schedules/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function clearAllSchedulesApi() {
-  const res = await fetch(`${API_BASE}/schedules`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/schedules`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function fetchAttendanceApi() {
-  const res = await fetch(`${API_BASE}/attendance`);
+  const res = await apiFetch(`${API_BASE}/attendance`);
   return res.json();
 }
 
 export async function createAttendanceApi(data: Partial<AttendanceRecord>) {
-  const res = await fetch(`${API_BASE}/attendance`, {
+  const res = await apiFetch(`${API_BASE}/attendance`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -264,12 +343,12 @@ export async function createAttendanceApi(data: Partial<AttendanceRecord>) {
 }
 
 export async function fetchFinanceApi() {
-  const res = await fetch(`${API_BASE}/finance`);
+  const res = await apiFetch(`${API_BASE}/finance`);
   return res.json();
 }
 
 export async function createFinanceApi(data: Partial<FinancialTransaction>) {
-  const res = await fetch(`${API_BASE}/finance`, {
+  const res = await apiFetch(`${API_BASE}/finance`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -278,12 +357,12 @@ export async function createFinanceApi(data: Partial<FinancialTransaction>) {
 }
 
 export async function fetchDocumentsApi() {
-  const res = await fetch(`${API_BASE}/documents`);
+  const res = await apiFetch(`${API_BASE}/documents`);
   return res.json();
 }
 
 export async function createDocumentApi(data: Partial<DocumentRecord>) {
-  const res = await fetch(`${API_BASE}/documents`, {
+  const res = await apiFetch(`${API_BASE}/documents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -292,12 +371,12 @@ export async function createDocumentApi(data: Partial<DocumentRecord>) {
 }
 
 export async function fetchAnnouncementsApi() {
-  const res = await fetch(`${API_BASE}/announcements`);
+  const res = await apiFetch(`${API_BASE}/announcements`);
   return res.json();
 }
 
 export async function createAnnouncementApi(data: Partial<Announcement>) {
-  const res = await fetch(`${API_BASE}/announcements`, {
+  const res = await apiFetch(`${API_BASE}/announcements`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -306,7 +385,7 @@ export async function createAnnouncementApi(data: Partial<Announcement>) {
 }
 
 export async function updateAnnouncementApi(id: string, data: Partial<Announcement>) {
-  const res = await fetch(`${API_BASE}/announcements/${id}`, {
+  const res = await apiFetch(`${API_BASE}/announcements/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -315,17 +394,17 @@ export async function updateAnnouncementApi(id: string, data: Partial<Announceme
 }
 
 export async function deleteAnnouncementApi(id: string) {
-  const res = await fetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function fetchCorrectionsApi() {
-  const res = await fetch(`${API_BASE}/corrections`);
+  const res = await apiFetch(`${API_BASE}/corrections`);
   return res.json();
 }
 
 export async function createCorrectionApi(data: { memberId: string; memberName: string; details: string }) {
-  const res = await fetch(`${API_BASE}/corrections`, {
+  const res = await apiFetch(`${API_BASE}/corrections`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -334,7 +413,7 @@ export async function createCorrectionApi(data: { memberId: string; memberName: 
 }
 
 export async function updateCorrectionStatusApi(id: string, status: string, adminNotes: string) {
-  const res = await fetch(`${API_BASE}/corrections/${id}`, {
+  const res = await apiFetch(`${API_BASE}/corrections/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status, adminNotes }),
@@ -343,12 +422,12 @@ export async function updateCorrectionStatusApi(id: string, status: string, admi
 }
 
 export async function fetchAuditLogsApi() {
-  const res = await fetch(`${API_BASE}/audit-logs`);
+  const res = await apiFetch(`${API_BASE}/audit-logs`);
   return res.json();
 }
 
 export async function importMembersApi(members: Partial<Member>[]) {
-  const res = await fetch(`${API_BASE}/import/members`, {
+  const res = await apiFetch(`${API_BASE}/import/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ members }),
@@ -357,6 +436,11 @@ export async function importMembersApi(members: Partial<Member>[]) {
 }
 
 // AI Pastoral & Gerejawi Services
+export async function fetchAiStatusApi() {
+  const res = await apiFetch(`${API_BASE}/ai/status`);
+  return res.json() as Promise<{ success: boolean; configured: boolean; provider: 'gemini' | 'local-draft'; model: string | null }>;
+}
+
 export async function generateSermonApi(data: {
   serviceType: string;
   scripture: string;
@@ -364,7 +448,7 @@ export async function generateSermonApi(data: {
   liturgicalSeason: string;
   contextNotes: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/sermon`, {
+  const res = await apiFetch(`${API_BASE}/ai/sermon`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -378,7 +462,7 @@ export async function generateWartaApi(data: {
   announcerName: string;
   tone: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/warta`, {
+  const res = await apiFetch(`${API_BASE}/ai/warta`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -393,7 +477,7 @@ export async function generatePastoralPrayerApi(data: {
   rayon?: string;
   notes?: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/pastoral-prayer`, {
+  const res = await apiFetch(`${API_BASE}/ai/pastoral-prayer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -404,7 +488,7 @@ export async function generatePastoralPrayerApi(data: {
 export async function generateInsightsApi(data: {
   statsSummary: any;
 }) {
-  const res = await fetch(`${API_BASE}/ai/insights`, {
+  const res = await apiFetch(`${API_BASE}/ai/insights`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -418,7 +502,7 @@ export async function generateSpiritualCounselingApi(data: {
   category?: string;
   userContext?: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/spiritual-counseling`, {
+  const res = await apiFetch(`${API_BASE}/ai/spiritual-counseling`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -432,7 +516,7 @@ export async function generateDailyDevotionalApi(data: {
   scripture?: string;
   audience?: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/daily-devotional`, {
+  const res = await apiFetch(`${API_BASE}/ai/daily-devotional`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -446,7 +530,7 @@ export async function generateLiturgyOrderApi(data: {
   scripture: string;
   rayon?: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/liturgy-order`, {
+  const res = await apiFetch(`${API_BASE}/ai/liturgy-order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -459,7 +543,7 @@ export async function generateSundaySchoolApi(data: {
   storyTheme: string;
   scripture: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/sunday-school`, {
+  const res = await apiFetch(`${API_BASE}/ai/sunday-school`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -472,7 +556,7 @@ export async function generateBibleStudyApi(data: {
   topic: string;
   audience?: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/bible-study`, {
+  const res = await apiFetch(`${API_BASE}/ai/bible-study`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -493,7 +577,7 @@ export async function generateChurchNewsApi(data: {
   notes?: string;
   imageUrl?: string;
 }) {
-  const res = await fetch(`${API_BASE}/ai/church-news`, {
+  const res = await apiFetch(`${API_BASE}/ai/church-news`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -502,17 +586,17 @@ export async function generateChurchNewsApi(data: {
 }
 
 export async function deleteFinanceApi(id: string) {
-  const res = await fetch(`${API_BASE}/finance/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/finance/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function deleteSacramentApi(type: string, id: string) {
-  const res = await fetch(`${API_BASE}/sacraments/${type}/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/sacraments/${type}/${id}`, { method: 'DELETE' });
   return res.json();
 }
 
 export async function updateMemberPhotoApi(memberId: string, photoUrl: string) {
-  const res = await fetch(`${API_BASE}/members/${memberId}/photo`, {
+  const res = await apiFetch(`${API_BASE}/members/${memberId}/photo`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ photoUrl }),
@@ -521,7 +605,7 @@ export async function updateMemberPhotoApi(memberId: string, photoUrl: string) {
 }
 
 export async function purgeSampleDataApi() {
-  const res = await fetch(`${API_BASE}/database/clear-samples`, {
+  const res = await apiFetch(`${API_BASE}/database/clear-samples`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });

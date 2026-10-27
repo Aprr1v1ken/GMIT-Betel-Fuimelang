@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Database, Download, Upload, Shield, RefreshCw, CheckCircle2, AlertTriangle, FileCode } from 'lucide-react';
+import { apiFetch } from '../../services/api.ts';
 
 interface BackupViewProps {
   onOpenImport: () => void;
@@ -12,7 +13,8 @@ export const BackupView: React.FC<BackupViewProps> = ({ onOpenImport }) => {
   const handleDownloadBackup = async () => {
     setDownloading(true);
     try {
-      const res = await fetch('/api/backup');
+      const res = await apiFetch('/api/backup');
+      if (!res.ok) throw new Error('Sesi tidak memiliki izin untuk mengunduh backup.');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -105,7 +107,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onOpenImport }) => {
             Keamanan Data & Prinsip Perlindungan Data Pribadi (PDP)
           </h4>
           <p className="text-slate-400 leading-relaxed">
-            Database tersimpan secara persisten pada server lokal/cloud gereja dengan proteksi ACID SQLite. Data NIK, kontak, catatan pastoral, dan arsip dokumen dilindungi oleh Role-Based Access Control (RBAC). Lakukan pencadangan database secara berkala setiap akhir bulan atau setelah ibadah raya.
+            Database menggunakan SQLite untuk kerja lokal dan snapshot Postgres untuk penyimpanan cloud di Vercel. Data NIK, kontak, catatan pastoral, dan arsip dokumen dilindungi oleh sesi bertanda tangan dan Role-Based Access Control (RBAC). Lakukan pencadangan database secara berkala setiap akhir bulan atau setelah ibadah raya.
           </p>
         </div>
       </div>
