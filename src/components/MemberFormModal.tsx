@@ -10,6 +10,8 @@ import {
   type Family,
 } from '../types/index.ts';
 
+import { uploadMemberPhotoToFirebase } from '../services/storage.ts';
+
 interface MemberFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -31,6 +33,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'diri' | 'alamat' | 'gereja' | 'sakramen' | 'keluarga' | 'catatan'>('diri');
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoSource, setPhotoSource] = useState<string>('');
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState<Partial<Member>>({
@@ -69,6 +73,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   useEffect(() => {
     if (member) {
       setFormData({ ...member });
+      if (member.photoUrl) setPhotoSource('saved');
     } else {
       setFormData({
         fullName: '',
@@ -102,6 +107,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         status: 'Aktif',
         notes: '',
       });
+      setPhotoSource('');
     }
     setError('');
     setActiveTab('diri');
@@ -115,7 +121,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -124,40 +130,18 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 400;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          }
-        } else {
-          if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
-          handleChange('photoUrl', compressed);
-          setError('');
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+    setUploadingPhoto(true);
+    setError('');
+    try {
+      const res = await uploadMemberPhotoToFirebase(file, formData.fullName || member?.memberNo || 'member');
+      handleChange('photoUrl', res.url);
+      setPhotoSource(res.source === 'firebase_storage' ? 'Firebase Storage' : 'Cloud Storage');
+    } catch (uploadErr: any) {
+      console.warn('Gagal upload foto:', uploadErr);
+      setError(uploadErr.message || 'Gagal mengunggah foto jemaat');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -289,30 +273,38 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                       <Camera className="w-4 h-4 text-amber-400" />
                       <span>Foto Anggota untuk Kartu Jemaat (KAJ)</span>
                     </h4>
-                    {formData.photoUrl && (
-                      <span className="text-[10px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 self-center sm:self-auto">
-                        Foto Tersimpan
+                    {uploadingPhoto ? (
+                      <span className="text-[10px] text-amber-300 font-medium bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 animate-pulse">
+                        ⏳ Mengunggah ke Firebase Storage...
                       </span>
-                    )}
+                    ) : formData.photoUrl ? (
+                      <span className="text-[10px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 self-center sm:self-auto flex items-center gap-1">
+                        <span>🟢 Tersimpan di {photoSource || 'Firebase Storage'}</span>
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Unggah pas foto resmi anggota (format JPG/PNG/WEBP). Foto ini akan dicetak otomatis pada Kartu Anggota Jemaat berdesain elegan.
+                    Unggah pas foto resmi anggota (format JPG/PNG/WEBP). Foto otomatis disimpan ke Firebase Storage dan dicetak pada Kartu Anggota Jemaat (KAJ).
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2 pt-1 justify-center sm:justify-start">
                     <button
                       type="button"
+                      disabled={uploadingPhoto}
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-colors"
                     >
                       <Upload className="w-3.5 h-3.5" />
-                      <span>{formData.photoUrl ? 'Ganti Foto' : 'Unggah Foto dari HP/PC'}</span>
+                      <span>{uploadingPhoto ? 'Mengunggah...' : formData.photoUrl ? 'Ganti Foto (Storage)' : 'Unggah Foto Jemaat (Storage)'}</span>
                     </button>
 
-                    {formData.photoUrl && (
+                    {formData.photoUrl && !uploadingPhoto && (
                       <button
                         type="button"
-                        onClick={() => handleChange('photoUrl', '')}
+                        onClick={() => {
+                          handleChange('photoUrl', '');
+                          setPhotoSource('');
+                        }}
                         className="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-rose-300 border border-red-500/40 text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5 text-rose-400" />

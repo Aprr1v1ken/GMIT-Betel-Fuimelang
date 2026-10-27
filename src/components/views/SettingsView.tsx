@@ -34,9 +34,15 @@ import {
 
 interface SettingsViewProps {
   onNavigateToBackup?: () => void;
+  onPurgeSampleData?: () => Promise<void>;
+  isSuperAdmin?: boolean;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToBackup }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  onNavigateToBackup,
+  onPurgeSampleData,
+  isSuperAdmin = true,
+}) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
@@ -339,15 +345,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToBackup }
             </div>
           </div>
 
-          {onNavigateToBackup && (
-            <button
-              onClick={onNavigateToBackup}
-              className="mt-4 w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <Database className="w-4 h-4 text-amber-400" />
-              <span>Buka Menu Cadangan & Pemulihan Database</span>
-            </button>
-          )}
+          <div className="space-y-2 mt-4">
+            {onNavigateToBackup && (
+              <button
+                type="button"
+                onClick={onNavigateToBackup}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Database className="w-4 h-4 text-amber-400" />
+                <span>Buka Menu Cadangan & Pemulihan Database</span>
+              </button>
+            )}
+
+            {onPurgeSampleData && (
+              <button
+                type="button"
+                onClick={onPurgeSampleData}
+                className="w-full py-2.5 px-4 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-500/40 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg shadow-rose-950/30"
+                title="Hapus seluruh data contoh/dummy anggota jemaat, keluarga, jadwal, dan transaksi"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Bersihkan Seluruh Data Contoh (Database Murni)</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

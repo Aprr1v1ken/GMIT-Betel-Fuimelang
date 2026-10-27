@@ -1,12 +1,32 @@
-import React, { useRef, useState } from 'react';
-import { X, Printer, IdCard, Calendar, MapPin, Award, BookOpen, User, Phone, Mail, Palette, Check } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import {
+  X,
+  Printer,
+  IdCard,
+  Calendar,
+  MapPin,
+  Award,
+  BookOpen,
+  User,
+  Phone,
+  Mail,
+  Palette,
+  Check,
+  Camera,
+  Upload,
+  Trash2,
+  Cloud,
+  CheckCircle2,
+} from 'lucide-react';
 import { calculateAge, formatDateDMY } from '../utils/church-logic.ts';
 import type { Member, CardColorThemeId } from '../types/index.ts';
+import { uploadMemberPhotoToFirebase } from '../services/storage.ts';
 
 interface MemberDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   member: Member | null;
+  onUpdatePhoto?: (memberId: string, photoUrl: string) => Promise<void>;
 }
 
 interface ThemeDefinition {
@@ -131,14 +151,64 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
   isOpen,
   onClose,
   member,
+  onUpdatePhoto,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [activeThemeId, setActiveThemeId] = useState<CardColorThemeId>('gold');
   const [printMode, setPrintMode] = useState<'card-only' | 'full'>('card-only');
+  const [currentPhoto, setCurrentPhoto] = useState<string | undefined>(member?.photoUrl);
+  const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+  const [uploadSource, setUploadSource] = useState<string>('');
+  const [uploadToast, setUploadToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentPhoto(member?.photoUrl);
+    setUploadToast(null);
+    setUploadSource('');
+  }, [member]);
 
   if (!isOpen || !member) return null;
 
   const age = calculateAge(member.birthDate);
+
+  const handleDirectPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Silakan pilih file foto gambar (JPG, PNG, atau WEBP).');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    setUploadToast('⏳ Sedang memproses dan mengunggah foto ke Firebase Storage...');
+
+    try {
+      const uploadRes = await uploadMemberPhotoToFirebase(file, member.id || member.memberNo);
+      setCurrentPhoto(uploadRes.url);
+      setUploadSource(uploadRes.source);
+
+      if (onUpdatePhoto) {
+        await onUpdatePhoto(member.id, uploadRes.url);
+      }
+
+      setUploadToast(
+        uploadRes.source === 'firebase_storage'
+          ? '🟢 Foto berhasil diunggah ke Firebase Storage & tersimpan pada Kartu Jemaat!'
+          : '🟢 Foto jemaat berhasil disimpan di cloud & siap dicetak!'
+      );
+      setTimeout(() => setUploadToast(null), 4500);
+    } catch (err: any) {
+      console.error('Error uploading member photo:', err);
+      setUploadToast('❌ Gagal mengunggah foto: ' + (err?.message || 'Kesalahan jaringan.'));
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) {
+        photoInputRef.current.value = '';
+      }
+    }
+  };
 
   // Auto theme by Rayon resolution
   const getResolvedTheme = (): ThemeDefinition => {
@@ -271,6 +341,20 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             </div>
           </div>
 
+          {/* Upload Status Banner */}
+          {uploadToast && (
+            <div className="p-3 rounded-xl bg-slate-900 border border-amber-500/40 text-xs text-amber-200 flex items-center justify-between print:hidden">
+              <span>{uploadToast}</span>
+              <button
+                type="button"
+                onClick={() => setUploadToast(null)}
+                className="text-slate-400 hover:text-white ml-2 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Digital Member Card Visual (Printable ID Card with chosen theme) */}
           <div
             ref={cardRef}
@@ -320,22 +404,73 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
 
             {/* Middle Card Details */}
             <div className="flex flex-col sm:flex-row gap-5 items-start">
-              {/* Photo box */}
-              <div
-                className={`w-24 h-28 rounded-xl ${currentTheme.photoBg} border-2 overflow-hidden flex flex-col items-center justify-center shrink-0 shadow-inner`}
-              >
-                {member.photoUrl ? (
-                  <img
-                    src={member.photoUrl}
-                    alt={member.fullName}
-                    className="w-full h-full object-cover"
+              {/* Photo box & Upload Control */}
+              <div className="flex flex-col items-center gap-2 shrink-0">
+                <div
+                  className={`w-28 h-36 rounded-xl ${currentTheme.photoBg} border-2 overflow-hidden flex flex-col items-center justify-center relative shadow-inner group`}
+                >
+                  {(currentPhoto || member.photoUrl) ? (
+                    <img
+                      src={currentPhoto || member.photoUrl}
+                      alt={member.fullName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center p-2">
+                      <User className={`w-10 h-10 mx-auto mb-1.5 ${currentTheme.isLight ? 'text-slate-500' : 'text-amber-400 opacity-70'}`} />
+                      <span className={`text-[10px] font-bold block ${currentTheme.labelColor}`}>PAS FOTO</span>
+                      <span className={`text-[8px] ${currentTheme.labelColor}`}>3x4 Resmi</span>
+                    </div>
+                  )}
+
+                  {/* Hover Overlay Button on Web (print:hidden) */}
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white text-[10px] font-medium print:hidden cursor-pointer"
+                    title="Klik untuk memilih foto baru dari perangkat"
+                  >
+                    <Camera className="w-5 h-5 text-amber-400" />
+                    <span>Ganti Foto</span>
+                  </button>
+                </div>
+
+                {/* Upload action button & badge (Hidden on print) */}
+                <div className="flex flex-col items-center gap-1 print:hidden">
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleDirectPhotoChange}
+                    className="hidden"
                   />
-                ) : (
-                  <div className="text-center p-2">
-                    <User className={`w-8 h-8 mx-auto mb-1 ${currentTheme.isLight ? 'text-slate-500' : 'text-amber-400 opacity-70'}`} />
-                    <span className={`text-[9px] font-medium ${currentTheme.labelColor}`}>Foto 3x4</span>
-                  </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    {uploadingPhoto ? (
+                      <span className="flex items-center gap-1 animate-pulse">
+                        <Upload className="w-3 h-3 animate-spin" />
+                        <span>Mengunggah...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <Camera className="w-3 h-3" />
+                        <span>{currentPhoto || member.photoUrl ? 'Ganti Foto' : 'Unggah Foto'}</span>
+                      </>
+                    )}
+                  </button>
+
+                  {(currentPhoto || member.photoUrl) && (
+                    <span className="text-[9px] text-emerald-400 flex items-center gap-0.5 font-medium">
+                      <CheckCircle2 className="w-2.5 h-2.5" />
+                      <span>Foto Siap Dicetak</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Data Grid */}

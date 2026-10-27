@@ -122,6 +122,16 @@ export function getCachedMembersLocally(): Member[] {
   }
 }
 
+// Clear locally cached members
+export function clearCachedMembersLocally() {
+  try {
+    localStorage.removeItem(CACHED_MEMBERS_KEY);
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
+  } catch (err) {
+    console.warn('Failed to clear cached members locally:', err);
+  }
+}
+
 // Sync all queued items to server
 export async function syncOfflineQueueToServer(
   createMemberApi: (data: Partial<Member>) => Promise<any>

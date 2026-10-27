@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Award, Heart, Plus, Search, Printer, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Award, Heart, Plus, Search, Printer, CheckCircle2, Trash2 } from 'lucide-react';
 import { formatDateDMY } from '../../utils/church-logic.ts';
 import type { BaptismRecord, ConfirmationRecord, MarriageRecord, Member } from '../../types/index.ts';
 
@@ -11,6 +11,7 @@ interface SacramentsViewProps {
   onOpenAddBaptism: () => void;
   onOpenAddConfirmation: () => void;
   onOpenAddMarriage: () => void;
+  onDeleteSacrament?: (type: 'baptis' | 'sidi' | 'nikah', id: string) => Promise<void>;
   onPrintCertificate: (type: string, record: any) => void;
 }
 
@@ -22,6 +23,7 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
   onOpenAddBaptism,
   onOpenAddConfirmation,
   onOpenAddMarriage,
+  onDeleteSacrament,
   onPrintCertificate,
 }) => {
   const [activeTab, setActiveTab] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
@@ -152,12 +154,28 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 font-medium text-slate-200">{b.ministerName}</td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{b.certificateNo}</td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onPrintCertificate('baptis', b)}
-                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold transition-colors"
-                      >
-                        Cetak Akta
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => onPrintCertificate('baptis', b)}
+                          className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold transition-colors"
+                        >
+                          Cetak Akta
+                        </button>
+                        {onDeleteSacrament && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Hapus catatan sakramen baptisan untuk ${b.memberName}?`)) {
+                                onDeleteSacrament('baptis', b.id);
+                              }
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                            title="Hapus data baptisan"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -195,12 +213,28 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 font-medium text-slate-200">{c.ministerName}</td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{c.certificateNo}</td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onPrintCertificate('sidi', c)}
-                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition-colors"
-                      >
-                        Cetak Akta
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => onPrintCertificate('sidi', c)}
+                          className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition-colors"
+                        >
+                          Cetak Akta
+                        </button>
+                        {onDeleteSacrament && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Hapus catatan peneguhan sidi untuk ${c.memberName}?`)) {
+                                onDeleteSacrament('sidi', c.id);
+                              }
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                            title="Hapus data sidi"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -241,12 +275,28 @@ export const SacramentsView: React.FC<SacramentsViewProps> = ({
                     <td className="py-3 px-4 font-medium text-slate-200">{m.ministerName}</td>
                     <td className="py-3 px-4 font-mono text-[11px] text-slate-400">{m.certificateNo}</td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => onPrintCertificate('nikah', m)}
-                        className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition-colors"
-                      >
-                        Cetak Akta
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => onPrintCertificate('nikah', m)}
+                          className="px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition-colors"
+                        >
+                          Cetak Akta
+                        </button>
+                        {onDeleteSacrament && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Hapus catatan pernikahan ${m.groomName} & ${m.brideName}?`)) {
+                                onDeleteSacrament('nikah', m.id);
+                              }
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                            title="Hapus data pernikahan"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

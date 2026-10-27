@@ -7,6 +7,7 @@ interface FamilyModalProps {
   onClose: () => void;
   onSave: (data: Partial<Family>) => Promise<void>;
   rayons: Rayon[];
+  family?: Family | null;
 }
 
 export const FamilyModal: React.FC<FamilyModalProps> = ({
@@ -14,14 +15,31 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
   onClose,
   onSave,
   rayons,
+  family,
 }) => {
-  const [headName, setHeadName] = useState('');
-  const [address, setAddress] = useState('Desa Lembur Tengah');
-  const [rayonId, setRayonId] = useState(rayons[0]?.id || 'r1');
-  const [phone, setPhone] = useState('');
-  const [notes, setNotes] = useState('');
+  const [headName, setHeadName] = useState(family?.headOfFamilyName || '');
+  const [address, setAddress] = useState(family?.address || 'Desa Lembur Tengah');
+  const [rayonId, setRayonId] = useState(family?.rayonId || rayons[0]?.id || 'r1');
+  const [phone, setPhone] = useState(family?.phone || '');
+  const [notes, setNotes] = useState(family?.notes || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    if (family) {
+      setHeadName(family.headOfFamilyName || '');
+      setAddress(family.address || 'Desa Lembur Tengah');
+      setRayonId(family.rayonId || rayons[0]?.id || 'r1');
+      setPhone(family.phone || '');
+      setNotes(family.notes || '');
+    } else {
+      setHeadName('');
+      setAddress('Desa Lembur Tengah');
+      setRayonId(rayons[0]?.id || 'r1');
+      setPhone('');
+      setNotes('');
+    }
+  }, [family, isOpen]);
 
   if (!isOpen) return null;
 
@@ -36,6 +54,7 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
     setError('');
     try {
       await onSave({
+        ...(family ? { id: family.id, familyNo: family.familyNo } : {}),
         headOfFamilyName: headName,
         address,
         rayonId,
@@ -56,7 +75,7 @@ export const FamilyModal: React.FC<FamilyModalProps> = ({
         <div className="flex items-center justify-between p-5 border-b border-amber-500/20 bg-[#070b18]">
           <h3 className="text-base font-bold text-amber-300 flex items-center gap-2">
             <Home className="w-5 h-5 text-amber-400" />
-            <span>Tambah Kartu Keluarga (KK) Baru</span>
+            <span>{family ? 'Ubah Data Kartu Keluarga (KK)' : 'Tambah Kartu Keluarga (KK) Baru'}</span>
           </h3>
           <button
             onClick={onClose}

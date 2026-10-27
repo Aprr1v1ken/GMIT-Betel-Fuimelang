@@ -48,6 +48,8 @@ import {
   syncOfflineQueueToServer,
   cacheMembersLocally,
   getCachedMembersLocally,
+  clearOfflineQueue,
+  clearCachedMembersLocally,
 } from './utils/offline-sync.ts';
 import type {
   Member,
@@ -100,6 +102,7 @@ export default function App() {
   const [showMemberDetailModal, setShowMemberDetailModal] = useState(false);
   const [detailMember, setDetailMember] = useState<Member | null>(null);
   const [showFamilyModal, setShowFamilyModal] = useState(false);
+  const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [showSacramentModal, setShowSacramentModal] = useState(false);
   const [sacramentType, setSacramentType] = useState<'baptis' | 'sidi' | 'nikah'>('baptis');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -557,9 +560,77 @@ export default function App() {
     await loadAllData();
   };
 
+  // Direct Photo Update Handler for KAJ Cards (Linked to Firebase Storage & Database)
+  const handleUpdateMemberPhoto = async (memberId: string, photoUrl: string) => {
+    try {
+      await api.updateMemberPhotoApi(memberId, photoUrl);
+      await cloudSync.syncMemberToFirestore({
+        id: memberId,
+        photoUrl,
+        updatedAt: new Date().toISOString(),
+      });
+      setMembers((prev) => {
+        const updated = prev.map((m) => (m.id === memberId ? { ...m, photoUrl } : m));
+        cacheMembersLocally(updated);
+        return updated;
+      });
+      if (detailMember && detailMember.id === memberId) {
+        setDetailMember({ ...detailMember, photoUrl });
+      }
+      setSyncToast({
+        message: 'Foto anggota jemaat berhasil diperbarui dan tersimpan di Firebase Storage & database!',
+        type: 'success',
+      });
+    } catch (err: any) {
+      console.error('Failed to update member photo in App:', err);
+      setSyncToast({
+        message: 'Foto tersimpan secara lokal dan siap dicetak pada Kartu Jemaat.',
+        type: 'info',
+      });
+    }
+  };
+
+  // Super Admin Purge Sample / Dummy Data
+  const handlePurgeAllSampleData = async () => {
+    if (!confirm('Apakah Anda yakin ingin menghapus seluruh data contoh dalam aplikasi ini? Tindakan ini akan mengosongkan data jemaat, kartu keluarga, jadwal, transaksi contoh agar database bersih untuk data nyata GMIT Betel.')) {
+      return;
+    }
+    try {
+      await api.purgeSampleDataApi();
+      clearOfflineQueue();
+      clearCachedMembersLocally();
+      await loadAllData();
+      setSyncToast({
+        message: 'Seluruh data contoh berhasil dibersihkan! Database GMIT Betel kini bersih dan siap diisi data riil.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      console.error('Error purging sample data:', err);
+      setSyncToast({
+        message: 'Gagal membersihkan data contoh: ' + (err?.message || 'Kesalahan server'),
+        type: 'error',
+      });
+    }
+  };
+
   // Family CRUD handlers
   const handleSaveFamily = async (data: Partial<Family>) => {
-    await api.createFamilyApi(data);
+    if (editingFamily || data.id) {
+      const famId = editingFamily?.id || data.id!;
+      await api.updateFamilyApi(famId, data);
+      setSyncToast({
+        message: `Data Kartu Keluarga "${data.headOfFamilyName}" berhasil diperbarui di database.`,
+        type: 'success',
+      });
+    } else {
+      await api.createFamilyApi(data);
+      setSyncToast({
+        message: `Kartu Keluarga baru "${data.headOfFamilyName}" berhasil disimpan ke database.`,
+        type: 'success',
+      });
+    }
+    setEditingFamily(null);
+    setShowFamilyModal(false);
     await loadAllData();
   };
 
@@ -622,6 +693,11 @@ export default function App() {
   };
   const handleSaveMarriage = async (data: any) => {
     await api.createMarriageApi(data);
+    await loadAllData();
+  };
+
+  const handleDeleteSacrament = async (type: 'baptis' | 'sidi' | 'nikah', id: string) => {
+    await api.deleteSacramentApi(type, id);
     await loadAllData();
   };
 
@@ -707,6 +783,11 @@ export default function App() {
   // Finance handler
   const handleAddFinance = async (data: Partial<FinancialTransaction>) => {
     await api.createFinanceApi(data);
+    await loadAllData();
+  };
+
+  const handleDeleteFinance = async (id: string) => {
+    await api.deleteFinanceApi(id);
     await loadAllData();
   };
 
@@ -956,7 +1037,14 @@ export default function App() {
               families={families}
               members={members}
               rayons={rayons}
-              onOpenAddModal={() => setShowFamilyModal(true)}
+              onOpenAddModal={() => {
+                setEditingFamily(null);
+                setShowFamilyModal(true);
+              }}
+              onEditFamily={(fam) => {
+                setEditingFamily(fam);
+                setShowFamilyModal(true);
+              }}
               onDeleteFamily={handleDeleteFamily}
               onOpenPrintReport={() => {
                 setReportType('rayons');
@@ -1024,6 +1112,7 @@ export default function App() {
                 setSacramentType('nikah');
                 setShowSacramentModal(true);
               }}
+              onDeleteSacrament={handleDeleteSacrament}
               onPrintCertificate={(type, record) => {
                 setReportType('sacraments');
                 setShowPrintReportModal(true);
@@ -1071,6 +1160,7 @@ export default function App() {
             <FinanceView
               transactions={transactions}
               onAddTransaction={handleAddFinance}
+              onDeleteTransaction={handleDeleteFinance}
               onOpenPrintReport={() => {
                 setReportType('finance');
                 setShowPrintReportModal(true);
@@ -1133,6 +1223,8 @@ export default function App() {
           {currentView === 'settings' && (
             <SettingsView
               onNavigateToBackup={() => setCurrentView('backup')}
+              onPurgeSampleData={handlePurgeAllSampleData}
+              isSuperAdmin={currentUser?.role === 'Super Admin' || currentUser?.email === 'aprryviken@gmail.com'}
             />
           )}
 
@@ -1177,13 +1269,18 @@ export default function App() {
           setDetailMember(null);
         }}
         member={detailMember}
+        onUpdatePhoto={handleUpdateMemberPhoto}
       />
 
       <FamilyModal
         isOpen={showFamilyModal}
-        onClose={() => setShowFamilyModal(false)}
+        onClose={() => {
+          setShowFamilyModal(false);
+          setEditingFamily(null);
+        }}
         onSave={handleSaveFamily}
         rayons={rayons}
+        family={editingFamily}
       />
 
       <SacramentModal

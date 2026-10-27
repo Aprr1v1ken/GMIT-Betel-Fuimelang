@@ -135,7 +135,7 @@ export async function fetchAnnouncementsFromFirestore(): Promise<Announcement[]>
 }
 
 // 4. Member Sync
-export async function syncMemberToFirestore(member: Member): Promise<void> {
+export async function syncMemberToFirestore(member: Partial<Member> & { id: string }): Promise<void> {
   try {
     const docRef = doc(db, 'members', member.id);
     await setDoc(docRef, {

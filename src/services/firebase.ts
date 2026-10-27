@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Silence internal Firestore SDK network timeout warnings
@@ -9,6 +10,7 @@ setLogLevel('silent');
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
+export const storage = getStorage(app, firebaseConfig.storageBucket);
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {

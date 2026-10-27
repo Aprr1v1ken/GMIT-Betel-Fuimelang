@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Printer, Download, Search, CheckCircle2 } from 'lucide-react';
+import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Printer, Download, Search, CheckCircle2, Trash2 } from 'lucide-react';
 import { formatRupiah, formatDateDMY } from '../../utils/church-logic.ts';
 import type { FinancialTransaction } from '../../types/index.ts';
 
 interface FinanceViewProps {
   transactions: FinancialTransaction[];
   onAddTransaction: (data: Partial<FinancialTransaction>) => Promise<void>;
+  onDeleteTransaction?: (id: string) => Promise<void>;
   onOpenPrintReport: () => void;
 }
 
 export const FinanceView: React.FC<FinanceViewProps> = ({
   transactions,
   onAddTransaction,
+  onDeleteTransaction,
   onOpenPrintReport,
 }) => {
   const [showModal, setShowModal] = useState(false);
@@ -201,6 +203,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <th className="py-3 px-4">Uraian / Deskripsi</th>
                 <th className="py-3 px-4 text-right">Jumlah (Rp)</th>
                 <th className="py-3 px-4">Pencatat</th>
+                {onDeleteTransaction && <th className="py-3 px-4 text-right">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -218,6 +221,22 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-400 text-[11px]">{t.recordedBy}</td>
+                  {onDeleteTransaction && (
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`Hapus catatan transaksi ${t.txNo} (${t.category})?`)) {
+                            onDeleteTransaction(t.id);
+                          }
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Hapus transaksi kas"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

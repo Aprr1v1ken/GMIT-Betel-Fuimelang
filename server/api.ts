@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDb } from './db.ts';
+import { getDb, purgeAllSampleData } from './db.ts';
 import { aiRouter } from './ai.ts';
 import {
   generateMemberNo,
@@ -270,7 +270,44 @@ apiRouter.put('/members/:id', (req, res) => {
   const data = req.body;
   const now = new Date().toISOString().substring(0, 10);
 
-  if (data.nik && data.nik.trim().length > 0 && !/^\d{16}$/.test(data.nik.trim())) {
+  const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(id) as any;
+  if (!existing) {
+    return res.status(404).json({ success: false, message: 'Data jemaat tidak ditemukan' });
+  }
+
+  const fullName = data.fullName !== undefined ? data.fullName : existing.full_name;
+  const nickname = data.nickname !== undefined ? data.nickname : (existing.nickname || '');
+  const nik = data.nik !== undefined ? data.nik : (existing.nik || '');
+  const familyCardNo = data.familyCardNo !== undefined ? data.familyCardNo : (existing.family_card_no || '');
+  const familyId = data.familyId !== undefined ? data.familyId : (existing.family_id || '');
+  const familyRole = data.familyRole !== undefined ? data.familyRole : (existing.family_role || 'Anggota');
+  const gender = data.gender !== undefined ? data.gender : existing.gender;
+  const birthPlace = data.birthPlace !== undefined ? data.birthPlace : (existing.birth_place || '');
+  const birthDate = data.birthDate !== undefined ? data.birthDate : existing.birth_date;
+  const address = data.address !== undefined ? data.address : (existing.address || '');
+  const kelurahan = data.kelurahan !== undefined ? data.kelurahan : (existing.kelurahan || 'Lembur Tengah');
+  const kecamatan = data.kecamatan !== undefined ? data.kecamatan : (existing.kecamatan || 'Alor Tengah Utara');
+  const kabupaten = data.kabupaten !== undefined ? data.kabupaten : (existing.kabupaten || 'Alor');
+  const phone = data.phone !== undefined ? data.phone : (existing.phone || '');
+  const email = data.email !== undefined ? data.email : (existing.email || '');
+  const maritalStatus = data.maritalStatus !== undefined ? data.maritalStatus : existing.marital_status;
+  const spouseName = data.spouseName !== undefined ? data.spouseName : (existing.spouse_name || '');
+  const rayonId = data.rayonId !== undefined ? data.rayonId : existing.rayon_id;
+  const categorialGroupId = data.categorialGroupId !== undefined ? data.categorialGroupId : existing.categorial_group_id;
+  const membershipStatus = data.membershipStatus !== undefined ? data.membershipStatus : existing.membership_status;
+  const baptismStatus = data.baptismStatus !== undefined ? data.baptismStatus : existing.baptism_status;
+  const baptismDate = data.baptismDate !== undefined ? data.baptismDate : (existing.baptism_date || '');
+  const confirmationStatus = data.confirmationStatus !== undefined ? data.confirmationStatus : existing.confirmation_status;
+  const confirmationDate = data.confirmationDate !== undefined ? data.confirmationDate : (existing.confirmation_date || '');
+  const marriageChurchStatus = data.marriageChurchStatus !== undefined ? data.marriageChurchStatus : existing.marriage_church_status;
+  const marriageDate = data.marriageDate !== undefined ? data.marriageDate : (existing.marriage_date || '');
+  const education = data.education !== undefined ? data.education : (existing.education || '');
+  const occupation = data.occupation !== undefined ? data.occupation : (existing.occupation || '');
+  const status = data.status !== undefined ? data.status : existing.status;
+  const notes = data.notes !== undefined ? data.notes : (existing.notes || '');
+  const photoUrl = data.photoUrl !== undefined ? data.photoUrl : (existing.photo_url || '');
+
+  if (nik && nik.trim().length > 0 && !/^\d{16}$/.test(nik.trim())) {
     return res.status(400).json({ success: false, message: 'Nomor Induk Kependudukan (NIK) tidak boleh kurang atau lebih dari 16 angka' });
   }
 
@@ -285,22 +322,47 @@ apiRouter.put('/members/:id', (req, res) => {
         education = ?, occupation = ?, status = ?, notes = ?, photo_url = ?, updated_at = ?
       WHERE id = ?
     `).run(
-      data.fullName, data.nickname || '', data.nik || '', data.familyCardNo || '', data.familyId || '',
-      data.familyRole || 'Anggota', data.gender, data.birthPlace || '', data.birthDate, data.address || '',
-      data.kelurahan || 'Lembur Tengah', data.kecamatan || 'Alor Tengah Utara', data.kabupaten || 'Alor',
-      data.phone || '', data.email || '', data.maritalStatus || 'Belum Menikah', data.spouseName || '',
-      data.rayonId, data.categorialGroupId || 'c1', data.membershipStatus || 'Tetap',
-      data.baptismStatus || 'Belum', data.baptismDate || '', data.confirmationStatus || 'Belum',
-      data.confirmationDate || '', data.marriageChurchStatus || 'Belum', data.marriageDate || '',
-      data.education || '', data.occupation || '', data.status || 'Aktif', data.notes || '',
-      data.photoUrl || '', now, id
+      fullName, nickname, nik, familyCardNo, familyId,
+      familyRole, gender, birthPlace, birthDate, address,
+      kelurahan, kecamatan, kabupaten,
+      phone, email, maritalStatus, spouseName,
+      rayonId, categorialGroupId, membershipStatus,
+      baptismStatus, baptismDate, confirmationStatus,
+      confirmationDate, marriageChurchStatus, marriageDate,
+      education, occupation, status, notes,
+      photoUrl, now, id
     );
 
-    addAuditLog('admin', 'Admin', 'Ubah Jemaat', 'Database Jemaat', `Mengubah data anggota jemaat: ${data.fullName}`);
+    addAuditLog('admin', 'Admin', 'Ubah Jemaat', 'Database Jemaat', `Mengubah data anggota jemaat: ${fullName}`);
 
-    res.json({ success: true, message: 'Data jemaat berhasil diperbarui' });
+    res.json({ success: true, message: 'Data jemaat berhasil diperbarui', photoUrl });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Gagal memperbarui data: ' + err.message });
+  }
+});
+
+// Update Member Photo directly
+apiRouter.post('/members/:id/photo', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const { photoUrl } = req.body;
+  const now = new Date().toISOString().substring(0, 10);
+
+  if (!photoUrl) {
+    return res.status(400).json({ success: false, message: 'URL foto jemaat wajib disertakan' });
+  }
+
+  try {
+    const existing = db.prepare('SELECT full_name FROM members WHERE id = ?').get(id) as any;
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Jemaat tidak ditemukan' });
+    }
+
+    db.prepare('UPDATE members SET photo_url = ?, updated_at = ? WHERE id = ?').run(photoUrl, now, id);
+    addAuditLog('admin', 'Admin', 'Upload Foto Jemaat', 'Database Jemaat', `Mengunggah foto kartu jemaat untuk: ${existing.full_name}`);
+    res.json({ success: true, message: 'Foto jemaat berhasil diperbarui di database', photoUrl });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -368,6 +430,34 @@ apiRouter.post('/families', (req, res) => {
     res.json({ success: true, message: 'Kartu Keluarga berhasil ditambahkan', id, familyNo });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Gagal menambahkan KK: ' + err.message });
+  }
+});
+
+apiRouter.put('/families/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    const existing = db.prepare('SELECT * FROM families WHERE id = ?').get(id) as any;
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Data KK tidak ditemukan' });
+    }
+    const headName = data.headOfFamilyName !== undefined ? data.headOfFamilyName : existing.head_of_family_name;
+    const address = data.address !== undefined ? data.address : existing.address;
+    const rayonId = data.rayonId !== undefined ? data.rayonId : existing.rayon_id;
+    const phone = data.phone !== undefined ? data.phone : existing.phone;
+    const notes = data.notes !== undefined ? data.notes : existing.notes;
+
+    db.prepare(`
+      UPDATE families SET
+        head_of_family_name = ?, address = ?, rayon_id = ?, phone = ?, notes = ?
+      WHERE id = ?
+    `).run(headName, address, rayonId, phone, notes, id);
+
+    addAuditLog('admin', 'Admin', 'Ubah Kartu Keluarga', 'Keluarga & KK', `Mengubah Kartu Keluarga: ${headName}`);
+    res.json({ success: true, message: 'Data KK berhasil diperbarui' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Gagal memperbarui KK: ' + err.message });
   }
 });
 
@@ -1275,4 +1365,62 @@ apiRouter.get('/backup', (req, res) => {
     backupTime: new Date().toISOString(),
     tables: backupData,
   });
+});
+
+// 18. Purge All Sample / Dummy Data
+apiRouter.post('/database/clear-samples', (req, res) => {
+  try {
+    const db = getDb();
+    purgeAllSampleData(db);
+    addAuditLog('superadmin', 'Super Admin', 'Pembersihan Data Contoh', 'Manajemen Database', 'Menghapus seluruh data contoh/dummy jemaat, kartu keluarga, jadwal, transaksi, dan sakramen.');
+    res.json({
+      success: true,
+      message: 'Seluruh data contoh berhasil dihapus. Database GMIT Betel Fuimelang kini dalam kondisi bersih dan siap diisi data riil jemaat.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Gagal membersihkan data contoh: ' + err.message });
+  }
+});
+
+// 19. Additional Super Admin Delete Endpoints for complete data control
+apiRouter.delete('/finance/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM financial_transactions WHERE id = ?').run(id);
+    addAuditLog('admin', 'Admin', 'Hapus Transaksi', 'Keuangan Kas Gereja', `Menghapus transaksi ID: ${id}`);
+    res.json({ success: true, message: 'Transaksi kas berhasil dihapus' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/sacraments/:type/:id', (req, res) => {
+  const db = getDb();
+  const { type, id } = req.params;
+  try {
+    if (type === 'baptisms' || type === 'baptis') {
+      db.prepare('DELETE FROM baptisms WHERE id = ?').run(id);
+    } else if (type === 'confirmations' || type === 'sidi') {
+      db.prepare('DELETE FROM confirmations WHERE id = ?').run(id);
+    } else if (type === 'marriages' || type === 'nikah') {
+      db.prepare('DELETE FROM marriages WHERE id = ?').run(id);
+    }
+    addAuditLog('admin', 'Admin', 'Hapus Sakramen', 'Sakramen & Peristiwa', `Menghapus data sakramen ${type} ID: ${id}`);
+    res.json({ success: true, message: 'Catatan sakramen berhasil dihapus' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.delete('/events/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM events WHERE id = ?').run(id);
+    addAuditLog('admin', 'Admin', 'Hapus Kegiatan', 'Agenda Kegiatan', `Menghapus kegiatan ID: ${id}`);
+    res.json({ success: true, message: 'Kegiatan berhasil dihapus' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });

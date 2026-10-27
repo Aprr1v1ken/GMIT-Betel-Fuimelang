@@ -292,23 +292,61 @@ function initSchema(db: DatabaseSync) {
     db.exec("ALTER TABLE announcements ADD COLUMN image_url TEXT;");
   } catch {}
 
-  // Ensure old demo staff, old dummy liturgist and preacher are emptied so user can input real actual data
+  // Purge sample dummy data so the database is pristine and ready for real church usage
   try {
-    db.exec("DELETE FROM church_staff;");
-    db.exec("UPDATE service_schedules SET liturgist = '', preacher = '', elder_duty = '', deacon_duty = '', song_leader = '', musicians = '', multimedia_operator = '', usher = '', bible_reader = '';");
-    db.exec("UPDATE rayons SET leader_name = '', leader_phone = '';");
-    db.exec("UPDATE categorial_groups SET coordinator = '';");
+    db.exec(`
+      DELETE FROM members WHERE id IN ('m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12') OR member_no LIKE 'GMIT-BF-2026-00%' OR member_no LIKE 'GMIT-BF-2026-01%';
+      DELETE FROM families WHERE id IN ('f1','f2','f3','f4') OR family_no LIKE 'KK-BF-00%';
+      DELETE FROM service_schedules WHERE id = 'sch-1';
+      DELETE FROM financial_transactions WHERE id IN ('tx-1','tx-2','tx-3');
+      DELETE FROM church_staff;
+      UPDATE service_schedules SET liturgist = '', preacher = '', elder_duty = '', deacon_duty = '', song_leader = '', musicians = '', multimedia_operator = '', usher = '', bible_reader = '';
+      UPDATE rayons SET leader_name = '', leader_phone = '';
+      UPDATE categorial_groups SET coordinator = '';
+    `);
   } catch (cleanErr) {
-    console.warn('DB clean old staff check:', cleanErr);
+    console.warn('DB clean dummy rows check:', cleanErr);
   }
 
   seedInitialData(db);
+}
+
+export function purgeAllSampleData(db: DatabaseSync) {
+  try {
+    db.exec(`
+      DELETE FROM members;
+      DELETE FROM families;
+      DELETE FROM baptisms;
+      DELETE FROM confirmations;
+      DELETE FROM marriages;
+      DELETE FROM member_mutations;
+      DELETE FROM events;
+      DELETE FROM service_schedules;
+      DELETE FROM attendance_records;
+      DELETE FROM financial_transactions;
+      DELETE FROM documents;
+      DELETE FROM announcements;
+      DELETE FROM data_correction_requests;
+      DELETE FROM church_staff;
+      UPDATE rayons SET leader_name = '', leader_phone = '';
+      UPDATE categorial_groups SET coordinator = '';
+    `);
+    console.log('[DB] Seluruh data contoh jemaat dan agenda berhasil dibersihkan.');
+    return true;
+  } catch (err) {
+    console.error('[DB] Gagal membersihkan data contoh:', err);
+    throw err;
+  }
 }
 
 function seedInitialData(db: DatabaseSync) {
   // Check if users already seeded
   const userCheck = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
   if (userCheck && userCheck.count > 0) {
+    // Ensure Super Admin email aprryviken@gmail.com is up to date
+    try {
+      db.prepare("UPDATE users SET email = 'aprryviken@gmail.com', role = 'Super Admin' WHERE id = 'u1' OR username = 'superadmin'").run();
+    } catch {}
     return;
   }
 
@@ -337,12 +375,9 @@ function seedInitialData(db: DatabaseSync) {
     insertCat.run(c.id, c.code, c.name, c.target_age_desc, c.coordinator);
   }
 
-  // 3. Church Staff / Majelis (Dikosongkan agar pengguna dapat menginput nama pelayan riil)
-  // Tidak ada staff bawaan agar bersih dan murni diisi data sebenarnya.
-
-  // 4. Users (Official Accounts)
+  // 3. Users (Official Accounts with Super Admin aprryviken@gmail.com)
   const users = [
-    { id: 'u1', username: 'superadmin', password_hash: 'admin123', name: 'Super Admin SYSJEGER', role: 'Super Admin', rayon_id: null, phone: '0811-0001-0001', email: 'admin@gmitbetel.id' },
+    { id: 'u1', username: 'superadmin', password_hash: 'admin123', name: 'Super Admin SYSJEGER', role: 'Super Admin', rayon_id: null, phone: '0811-0001-0001', email: 'aprryviken@gmail.com' },
     { id: 'u2', username: 'admingereja', password_hash: 'admin123', name: 'Dkn. Elisabeth Lopo (Tata Usaha)', role: 'Admin Gereja', rayon_id: null, phone: '0812-3877-4455', email: 'elisabeth.lopo@gmitbetel.id' },
     { id: 'u3', username: 'pendeta', password_hash: 'pendeta123', name: 'Pdt. Sonya W. Isu, S.Th (Ketua Majelis)', role: 'Ketua Majelis/Pendeta', rayon_id: null, phone: '085173095482', email: 'pdt.sonya@gmitbetel.id' },
     { id: 'u4', username: 'majelisrayon1', password_hash: 'rayon123', name: 'Pnt. Yulius Banamtuan (Penatua Rayon I)', role: 'Majelis/Rayon', rayon_id: 'r1', phone: '0812-3901-4411', email: 'yulius.b@gmitbetel.id' },
@@ -352,14 +387,14 @@ function seedInitialData(db: DatabaseSync) {
     insertUser.run(u.id, u.username, u.password_hash, u.name, u.role, u.rayon_id, u.phone, u.email);
   }
 
-  // 5. Audit Log (Database initialized clean for live church usage)
+  // 4. Audit Log (Database initialized clean for live church usage)
   const insertAudit = db.prepare(`
     INSERT INTO audit_logs (id, user_id, user_name, action, module, details, timestamp)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-  insertAudit.run('aud1', 'u1', 'Super Admin', 'Inisialisasi Sistem', 'Sistem', 'Database SYSJEGER V2.0 GMIT Betel Fuimelang Periode Pelayanan 2026-2029 siap digunakan', '2026-10-18 08:00:00');
+  insertAudit.run('aud1', 'u1', 'Super Admin', 'Inisialisasi Sistem', 'Sistem', 'Database SYSJEGER GMIT Betel Fuimelang Periode Pelayanan 2026-2029 siap digunakan dalam kondisi bersih', '2026-10-18 08:00:00');
 
-  seedCongregationData(db);
+  // No seedCongregationData called - system starts pristine with zero dummy data
 }
 
 function seedCongregationData(db: DatabaseSync) {

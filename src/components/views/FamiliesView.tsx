@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Plus, Search, Eye, Trash2, Printer, Users } from 'lucide-react';
+import { Home, Plus, Search, Eye, Trash2, Printer, Users, Edit } from 'lucide-react';
 import { formatDateDMY } from '../../utils/church-logic.ts';
 import type { Family, Member, Rayon } from '../../types/index.ts';
 
@@ -8,6 +8,7 @@ interface FamiliesViewProps {
   members: Member[];
   rayons: Rayon[];
   onOpenAddModal: () => void;
+  onEditFamily?: (fam: Family) => void;
   onDeleteFamily: (id: string) => void;
   onOpenPrintReport: () => void;
 }
@@ -17,6 +18,7 @@ export const FamiliesView: React.FC<FamiliesViewProps> = ({
   members,
   rayons,
   onOpenAddModal,
+  onEditFamily,
   onDeleteFamily,
   onOpenPrintReport,
 }) => {
@@ -147,6 +149,15 @@ export const FamiliesView: React.FC<FamiliesViewProps> = ({
                     <Eye className="w-3.5 h-3.5 text-amber-400" />
                     <span>Anggota KK</span>
                   </button>
+                  {onEditFamily && (
+                    <button
+                      onClick={() => onEditFamily(fam)}
+                      className="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-800 rounded transition-colors"
+                      title="Ubah Data KK"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       if (confirm(`Hapus Kartu Keluarga Kel. ${fam.headOfFamilyName}?`)) {
@@ -154,6 +165,7 @@ export const FamiliesView: React.FC<FamiliesViewProps> = ({
                       }
                     }}
                     className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
+                    title="Hapus KK"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

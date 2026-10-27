@@ -85,6 +85,15 @@ export async function createFamilyApi(data: Partial<Family>) {
   return res.json();
 }
 
+export async function updateFamilyApi(id: string, data: Partial<Family>) {
+  const res = await fetch(`${API_BASE}/families/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
 export async function deleteFamilyApi(id: string) {
   const res = await fetch(`${API_BASE}/families/${id}`, { method: 'DELETE' });
   return res.json();
@@ -488,6 +497,33 @@ export async function generateChurchNewsApi(data: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function deleteFinanceApi(id: string) {
+  const res = await fetch(`${API_BASE}/finance/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function deleteSacramentApi(type: string, id: string) {
+  const res = await fetch(`${API_BASE}/sacraments/${type}/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function updateMemberPhotoApi(memberId: string, photoUrl: string) {
+  const res = await fetch(`${API_BASE}/members/${memberId}/photo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ photoUrl }),
+  });
+  return res.json();
+}
+
+export async function purgeSampleDataApi() {
+  const res = await fetch(`${API_BASE}/database/clear-samples`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
   });
   return res.json();
 }
