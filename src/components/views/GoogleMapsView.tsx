@@ -49,14 +49,12 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
   const [mapZoom, setMapZoom] = useState(14);
   const [center, setCenter] = useState(defaultCenter);
 
-  // Church and rayon locations use the current administrative records. Only
-  // coordinates are defaults; names, leaders, phones, and coverage are live data.
-  const rayonPositions = [
-    { lat: -8.2365, lng: 124.579 },
-    { lat: -8.241, lng: 124.5825 },
-    { lat: -8.234, lng: 124.584 },
-    { lat: -8.245, lng: 124.575 },
-  ];
+  // Only saved coordinates become rayon markers. Unmapped rayons are never
+  // assigned a fabricated location.
+  const mappedRayons = rayons.filter((rayon) =>
+    typeof rayon.latitude === 'number' && Number.isFinite(rayon.latitude) &&
+    typeof rayon.longitude === 'number' && Number.isFinite(rayon.longitude)
+  );
   const churchLocations: ChurchPoint[] = [
     {
       id: 'church_main',
@@ -68,11 +66,11 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
       phone: '085173095482',
       memberCount: members.length,
     },
-    ...rayons.map((rayon, index) => ({
+    ...mappedRayons.map((rayon) => ({
       id: `rayon_${rayon.id}`,
       name: `Pos Pelayanan ${rayon.name}`,
       category: 'rayon' as const,
-      position: rayonPositions[index % rayonPositions.length],
+      position: { lat: rayon.latitude as number, lng: rayon.longitude as number },
       description: rayon.coverageArea || 'Wilayah pelayanan rayon GMIT Betel Fuimelang.',
       leader: rayon.leaderName || 'Koordinator belum diisi',
       phone: rayon.leaderPhone || '',
@@ -80,35 +78,14 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
     })),
   ];
 
-  // Map family residences around rayon sectors based on real members
-  const memberLocations: ChurchPoint[] = members.slice(0, 15).map((m, idx) => {
-    // Generate slight offset around church center for realistic neighborhood visualization
-    const angle = (idx / 15) * 2 * Math.PI;
-    const distance = 0.003 + (idx % 4) * 0.002;
-    const latOffset = Math.sin(angle) * distance;
-    const lngOffset = Math.cos(angle) * distance;
-
-    return {
-      id: `mem_${m.id}`,
-      name: `Keluarga ${m.fullName}`,
-      category: 'family',
-      position: {
-        lat: defaultCenter.lat + latOffset,
-        lng: defaultCenter.lng + lngOffset,
-      },
-      description: `Alamat: ${m.address} · Rayon: ${m.rayonName || 'Rayon Pelayanan'}`,
-      leader: m.fullName,
-      phone: m.phone,
-    };
-  });
-
-  const allPoints = [...churchLocations, ...memberLocations];
+  // Household markers are intentionally not inferred from names/addresses.
+  // They can be added later from explicitly stored household coordinates.
+  const allPoints = churchLocations;
 
   const filteredPoints = allPoints.filter((pt) => {
     if (filterCategory === 'all') return true;
     if (filterCategory === 'church' && pt.category === 'church') return true;
     if (filterCategory === 'rayon' && pt.category === 'rayon') return true;
-    if (filterCategory === 'family' && pt.category === 'family') return true;
     return false;
   });
 
@@ -182,17 +159,7 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
                 : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            Pos 4 Rayon (4)
-          </button>
-          <button
-            onClick={() => setFilterCategory('family')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer shrink-0 ${
-              filterCategory === 'family'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            Rumah Tangga Jemaat ({memberLocations.length})
+            Pos Rayon Terpetakan ({mappedRayons.length})
           </button>
         </div>
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from './db.ts';
+import { isSuperAdmin } from './auth.ts';
 
 /**
  * Additional CRUD endpoints used by the Super Admin data controls.
@@ -28,15 +29,37 @@ function required(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function canMutateDocument(user: any, accessLevel: string) {
+  return accessLevel !== 'Admin' || isSuperAdmin(user) || user?.role === 'Admin Gereja';
+}
+
+type CoordinateResult =
+  | { latitude: number | null; longitude: number | null; error?: never }
+  | { error: string; latitude?: never; longitude?: never };
+
+function readRayonCoordinates(data: any): CoordinateResult {
+  const hasLatitude = data.latitude !== undefined && data.latitude !== null && data.latitude !== '';
+  const hasLongitude = data.longitude !== undefined && data.longitude !== null && data.longitude !== '';
+  if (!hasLatitude && !hasLongitude) return { latitude: null, longitude: null };
+  const latitude = Number(data.latitude);
+  const longitude = Number(data.longitude);
+  if (!hasLatitude || !hasLongitude || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return { error: 'Latitude dan longitude harus diisi bersama dengan nilai yang valid.' };
+  }
+  return { latitude, longitude };
+}
+
 // Rayon pelayanan: create, edit, and safely delete unused rows.
 adminCrudRouter.post('/rayons', (req, res) => {
   const data = req.body || {};
   if (!required(data.name)) return res.status(400).json({ success: false, message: 'Nama rayon wajib diisi' });
+  const coordinates = readRayonCoordinates(data);
+  if (coordinates.error) return res.status(400).json({ success: false, message: coordinates.error });
   const db = getDb();
   const id = `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   try {
-    db.prepare('INSERT INTO rayons (id, code, name, leader_name, leader_phone, coverage_area, notes) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, data.code || `RY-${Date.now().toString().slice(-3)}`, data.name.trim(), data.leaderName || '', data.leaderPhone || '', data.coverageArea || '', data.notes || '');
+    db.prepare('INSERT INTO rayons (id, code, name, leader_name, leader_phone, coverage_area, notes, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, data.code || `RY-${Date.now().toString().slice(-3)}`, data.name.trim(), data.leaderName || '', data.leaderPhone || '', data.coverageArea || '', data.notes || '', coordinates.latitude ?? null, coordinates.longitude ?? null);
     logAction('Tambah Rayon', 'Rayon Pelayanan', `Menambahkan ${data.name}`);
     res.json({ success: true, id, message: 'Rayon berhasil ditambahkan' });
   } catch (error) { return errorResponse(res, error, 'Gagal menambahkan rayon'); }
@@ -51,8 +74,12 @@ adminCrudRouter.put('/rayons/:id', (req, res) => {
     if (!old) return res.status(404).json({ success: false, message: 'Rayon tidak ditemukan' });
     const name = data.name !== undefined ? data.name : old.name;
     if (!required(name)) return res.status(400).json({ success: false, message: 'Nama rayon wajib diisi' });
-    db.prepare('UPDATE rayons SET code = ?, name = ?, leader_name = ?, leader_phone = ?, coverage_area = ?, notes = ? WHERE id = ?')
-      .run(data.code ?? old.code, name.trim(), data.leaderName ?? old.leader_name ?? '', data.leaderPhone ?? old.leader_phone ?? '', data.coverageArea ?? old.coverage_area ?? '', data.notes ?? old.notes ?? '', id);
+    const coordinates: CoordinateResult = (data.latitude !== undefined || data.longitude !== undefined)
+      ? readRayonCoordinates(data)
+      : { latitude: old.latitude ?? null, longitude: old.longitude ?? null };
+    if (coordinates.error) return res.status(400).json({ success: false, message: coordinates.error });
+    db.prepare('UPDATE rayons SET code = ?, name = ?, leader_name = ?, leader_phone = ?, coverage_area = ?, notes = ?, latitude = ?, longitude = ? WHERE id = ?')
+      .run(data.code ?? old.code, name.trim(), data.leaderName ?? old.leader_name ?? '', data.leaderPhone ?? old.leader_phone ?? '', data.coverageArea ?? old.coverage_area ?? '', data.notes ?? old.notes ?? '', coordinates.latitude ?? null, coordinates.longitude ?? null, id);
     logAction('Ubah Rayon', 'Rayon Pelayanan', `Memperbarui ${name}`);
     res.json({ success: true, message: 'Rayon berhasil diperbarui' });
   } catch (error) { return errorResponse(res, error, 'Gagal memperbarui rayon'); }
@@ -167,6 +194,10 @@ adminCrudRouter.put('/documents/:id', (req, res) => {
   try {
     const old = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
     if (!old) return res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan' });
+    const user = (req as any).authUser;
+    if (!canMutateDocument(user, old.access_level) || !canMutateDocument(user, data.accessLevel ?? old.access_level)) {
+      return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses untuk mengubah dokumen Admin.' });
+    }
     db.prepare('UPDATE documents SET doc_no = ?, title = ?, category = ?, member_id = ?, file_name = ?, file_size = ?, access_level = ? WHERE id = ?')
       .run(data.docNo ?? old.doc_no, data.title ?? old.title, data.category ?? old.category, data.memberId ?? old.member_id, data.fileName ?? old.file_name, data.fileSize ?? old.file_size, data.accessLevel ?? old.access_level, id);
     logAction('Ubah Dokumen', 'Dokumen & Arsip', `Memperbarui dokumen ${data.title ?? old.title}`);
@@ -177,6 +208,11 @@ adminCrudRouter.put('/documents/:id', (req, res) => {
 adminCrudRouter.delete('/documents/:id', (req, res) => {
   const db = getDb();
   try {
+    const old = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id) as any;
+    if (!old) return res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan' });
+    if (!canMutateDocument((req as any).authUser, old.access_level)) {
+      return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses untuk menghapus dokumen Admin.' });
+    }
     const result = db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
     if (!result.changes) return res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan' });
     logAction('Hapus Dokumen', 'Dokumen & Arsip', `Menghapus dokumen ${req.params.id}`);

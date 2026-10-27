@@ -18,8 +18,11 @@ interface RayonsViewProps {
 type ManagerKind = 'rayon' | 'categorial';
 type ManagerState = { kind: ManagerKind; item?: Rayon | CategorialGroup } | null;
 
+const RayonMapPicker = React.lazy(() => import('../RayonMapPicker.tsx'));
+
 const emptyForm = {
   code: '', name: '', leaderName: '', leaderPhone: '', coverageArea: '', notes: '', targetAgeDesc: '', coordinator: '',
+  latitude: '', longitude: '',
 };
 
 export const RayonsView: React.FC<RayonsViewProps> = ({
@@ -58,6 +61,8 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
         ...emptyForm,
         code: rayon?.code || '', name: rayon?.name || '', leaderName: rayon?.leaderName || '',
         leaderPhone: rayon?.leaderPhone || '', coverageArea: rayon?.coverageArea || '', notes: rayon?.notes || '',
+        latitude: rayon?.latitude == null ? '' : String(rayon.latitude),
+        longitude: rayon?.longitude == null ? '' : String(rayon.longitude),
       });
     } else {
       const cat = item as CategorialGroup | undefined;
@@ -73,6 +78,16 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!manager || !form.name.trim()) return;
+    if (manager.kind === 'rayon') {
+      const hasLatitude = form.latitude.trim() !== '';
+      const hasLongitude = form.longitude.trim() !== '';
+      const latitude = Number(form.latitude);
+      const longitude = Number(form.longitude);
+      if (hasLatitude !== hasLongitude || (hasLatitude && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180))) {
+        setError('Isi latitude dan longitude bersama dengan nilai yang valid, atau kosongkan keduanya.');
+        return;
+      }
+    }
     setSaving(true);
     setError('');
     try {
@@ -80,6 +95,8 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
         await onSaveRayon({
           code: form.code.trim(), name: form.name.trim(), leaderName: form.leaderName.trim(),
           leaderPhone: form.leaderPhone.trim(), coverageArea: form.coverageArea.trim(), notes: form.notes.trim(),
+          latitude: form.latitude.trim() === '' ? null : Number(form.latitude),
+          longitude: form.longitude.trim() === '' ? null : Number(form.longitude),
         }, manager.item?.id);
       } else if (manager.kind === 'categorial' && onSaveCategorial) {
         await onSaveCategorial({
@@ -182,6 +199,10 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
                     <div><span className="text-slate-400 block text-[11px]">Penatua Koordinator:</span><span className="font-semibold text-white">{selectedRayon.leaderName || 'Belum diisi'}</span><div className="text-[11px] text-slate-400 font-mono flex items-center gap-1 mt-1">{selectedRayon.leaderPhone && <Phone className="w-3 h-3" />}{selectedRayon.leaderPhone || '-'}</div></div>
                     <div><span className="text-slate-400 block text-[11px]">Wilayah Cakupan Pelayanan:</span><span className="text-white">{selectedRayon.coverageArea || 'Belum diisi'}</span></div>
                   </div>
+                  <div className="pt-3 border-t border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-slate-400 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-cyan-300" />{selectedRayon.latitude != null && selectedRayon.longitude != null ? `${selectedRayon.latitude}, ${selectedRayon.longitude}` : 'Koordinat lokasi belum diisi'}</span>
+                    {selectedRayon.latitude != null && selectedRayon.longitude != null && <a href={`https://www.google.com/maps/search/?api=1&query=${selectedRayon.latitude},${selectedRayon.longitude}`} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200 font-semibold">Lihat di Google Maps →</a>}
+                  </div>
                 </div>
                 <div className="rounded-2xl bg-[#0c1329]/90 border border-slate-800 overflow-hidden">
                   <div className="p-4 bg-[#070b18]/90 border-b border-slate-800 flex items-center justify-between text-xs"><span className="font-bold text-white">Daftar Warga Jemaat di {selectedRayon.name}</span><span className="text-slate-400">{rayonMembers.length} Anggota</span></div>
@@ -231,6 +252,18 @@ export const RayonsView: React.FC<RayonsViewProps> = ({
               {manager.kind === 'rayon' ? <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block mb-1 text-slate-300">Koordinator / Penatua</label><input value={form.leaderName} onChange={(e) => updateForm('leaderName', e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" /></div><div><label className="block mb-1 text-slate-300">Telepon</label><input value={form.leaderPhone} onChange={(e) => updateForm('leaderPhone', e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" /></div></div>
                 <div><label className="block mb-1 text-slate-300">Wilayah Cakupan</label><input value={form.coverageArea} onChange={(e) => updateForm('coverageArea', e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" /></div>
+                <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800 space-y-3">
+                  <React.Suspense fallback={<div className="h-64 rounded-xl bg-slate-950 border border-slate-800 grid place-items-center text-slate-400">Memuat peta…</div>}>
+                    <RayonMapPicker latitude={form.latitude} longitude={form.longitude} onSelect={(latitude, longitude) => {
+                      updateForm('latitude', latitude.toFixed(7));
+                      updateForm('longitude', longitude.toFixed(7));
+                    }} />
+                  </React.Suspense>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label className="block mb-1 text-slate-300">Latitude</label><input type="number" step="any" min={-90} max={90} value={form.latitude} onChange={(e) => updateForm('latitude', e.target.value)} placeholder="-8.2384000" className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono" /></div>
+                    <div><label className="block mb-1 text-slate-300">Longitude</label><input type="number" step="any" min={-180} max={180} value={form.longitude} onChange={(e) => updateForm('longitude', e.target.value)} placeholder="124.6942000" className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono" /></div>
+                  </div>
+                </div>
                 <div><label className="block mb-1 text-slate-300">Catatan</label><textarea rows={2} value={form.notes} onChange={(e) => updateForm('notes', e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" /></div>
               </> : <>
                 <div><label className="block mb-1 text-slate-300">Target Usia / Peserta</label><input value={form.targetAgeDesc} onChange={(e) => updateForm('targetAgeDesc', e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" /></div>

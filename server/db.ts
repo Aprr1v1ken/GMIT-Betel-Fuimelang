@@ -66,7 +66,9 @@ function initSchema(db: DatabaseSync) {
       leader_name TEXT NOT NULL,
       leader_phone TEXT,
       coverage_area TEXT,
-      notes TEXT
+      notes TEXT,
+      latitude REAL,
+      longitude REAL
     );
 
     CREATE TABLE IF NOT EXISTS categorial_groups (
@@ -262,7 +264,25 @@ function initSchema(db: DatabaseSync) {
       file_name TEXT NOT NULL,
       file_size TEXT NOT NULL,
       upload_date TEXT NOT NULL,
-      access_level TEXT NOT NULL
+      access_level TEXT NOT NULL,
+      mime_type TEXT,
+      file_data TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS church_settings (
+      id TEXT PRIMARY KEY,
+      church_name TEXT NOT NULL,
+      klasis TEXT NOT NULL,
+      address TEXT,
+      phone TEXT,
+      email TEXT,
+      logo_url TEXT,
+      stamp_url TEXT,
+      signer_name TEXT,
+      signer_role TEXT,
+      secretary_name TEXT,
+      secretary_role TEXT,
+      updated_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS announcements (
@@ -317,6 +337,35 @@ function initSchema(db: DatabaseSync) {
   try {
     db.exec("ALTER TABLE events ADD COLUMN image_url TEXT;");
   } catch {}
+  try {
+    db.exec("ALTER TABLE rayons ADD COLUMN latitude REAL;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE rayons ADD COLUMN longitude REAL;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE documents ADD COLUMN mime_type TEXT;");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE documents ADD COLUMN file_data TEXT;");
+  } catch {}
+
+  db.prepare(`
+    INSERT OR IGNORE INTO church_settings
+    (id, church_name, klasis, address, phone, email, logo_url, stamp_url, signer_name, signer_role, secretary_name, secretary_role, updated_at)
+    VALUES (?, ?, ?, ?, '', '', ?, '', ?, ?, ?, ?, ?)
+  `).run(
+    'gmit-betel-fuimelang',
+    'GEREJA MASEHI INJILI DI TIMOR (GMIT) — JEMAAT BETEL FUIMELANG',
+    'KLASIS ALOR TENGAH UTARA',
+    'Jl. Raya Fuimelang - Moru, Desa Lembur Tengah, Kec. Alor Tengah Utara, Kab. Alor, Nusa Tenggara Timur',
+    '/images/regenerated_image_1792510154483.png',
+    'Pdt. Sonya W. Isu, S.Th',
+    'Ketua Majelis Jemaat / Pendeta',
+    'Dkn. Elisabeth Lopo',
+    'Sekretaris Majelis Jemaat',
+    new Date().toISOString(),
+  );
 
   // Never delete records during startup. Vercel may create a fresh serverless
   // instance at any time; destructive "demo cleanup" here would erase real data.

@@ -22,7 +22,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { usePWAInstall } from '../../hooks/usePWAInstall.ts';
-import type { User } from '../../types/index.ts';
+import type { ChurchSettings, Member, Rayon, User } from '../../types/index.ts';
+import { UserManagement } from '../UserManagement.tsx';
+import { ChurchLetterheadForm } from '../ChurchLetterheadForm.tsx';
 import {
   isWebAuthnSupported,
   isPlatformBiometricAvailable,
@@ -38,6 +40,10 @@ interface SettingsViewProps {
   onPurgeSampleData?: () => Promise<void>;
   isSuperAdmin?: boolean;
   currentUser?: User | null;
+  members?: Member[];
+  rayons?: Rayon[];
+  churchSettings: ChurchSettings;
+  onSaveChurchSettings: (settings: ChurchSettings) => Promise<void>;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -45,6 +51,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onPurgeSampleData,
   isSuperAdmin = true,
   currentUser = null,
+  members = [],
+  rayons = [],
+  churchSettings,
+  onSaveChurchSettings,
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
@@ -289,15 +299,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="space-y-3 text-xs">
             <div className="flex items-start justify-between py-1.5 border-b border-slate-800/60">
               <span className="text-slate-400">Nama Jemaat:</span>
-              <span className="font-bold text-white text-right">GMIT BETEL FUIMELANG</span>
+              <span className="font-bold text-white text-right max-w-[65%]">{churchSettings.churchName}</span>
             </div>
             <div className="flex items-start justify-between py-1.5 border-b border-slate-800/60">
               <span className="text-slate-400">Klasis:</span>
-              <span className="font-semibold text-slate-200 text-right">Alor Tengah Utara</span>
+              <span className="font-semibold text-slate-200 text-right">{churchSettings.klasis}</span>
             </div>
             <div className="flex items-start justify-between py-1.5 border-b border-slate-800/60">
               <span className="text-slate-400">Alamat Desa:</span>
-              <span className="font-semibold text-slate-200 text-right">Desa Lembur Tengah, Kec. Alor Tengah Utara, NTT</span>
+              <span className="font-semibold text-slate-200 text-right max-w-[65%]">{churchSettings.address || 'Belum diisi'}</span>
             </div>
             <div className="flex items-start justify-between py-1.5 border-b border-slate-800/60">
               <span className="text-slate-400">Periode Pelayanan:</span>
@@ -305,11 +315,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
             <div className="flex items-start justify-between py-1.5 border-b border-slate-800/60">
               <span className="text-slate-400">Ketua Majelis Jemaat:</span>
-              <span className="font-semibold text-slate-200 text-right">Pdt. Sonya W. Isu, S.Th</span>
+              <span className="font-semibold text-slate-200 text-right">{churchSettings.signerName || 'Belum diisi'}</span>
             </div>
             <div className="flex items-start justify-between py-1.5">
               <span className="text-slate-400">No. HP / WA Sekretariat:</span>
-              <span className="font-mono font-bold text-emerald-400 text-right">085173095482</span>
+              <span className="font-mono font-bold text-emerald-400 text-right">{churchSettings.phone || 'Belum diisi'}</span>
             </div>
           </div>
         </div>
@@ -373,6 +383,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {isSuperAdmin && (
+        <ChurchLetterheadForm settings={churchSettings} onSave={onSaveChurchSettings} />
+      )}
+
+      {isSuperAdmin && currentUser && (
+        <UserManagement currentUser={currentUser} members={members} rayons={rayons} />
+      )}
 
       {/* WEBAUTHN BIOMETRIC SECURITY CARD */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-[#0d1633] via-[#0b142d] to-[#0d1633] border border-amber-500/30 shadow-xl space-y-4">
