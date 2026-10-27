@@ -1,6 +1,20 @@
 import { Router } from 'express';
 import { getDb, purgeAllSampleData } from './db.ts';
+import {
+  findUserByEmail,
+  findUserByUsername,
+  getRequestUser,
+  hashPassword,
+  issueSession,
+  isSuperAdmin,
+  toPublicUser,
+  verifyPassword,
+} from './auth.ts';
+import { verifyFirebaseGoogleToken } from './google-auth.ts';
+import { persistSnapshot, persistenceEnabled, persistenceMode, preparePersistence } from './persistence.ts';
 import { aiRouter } from './ai.ts';
+import { adminCrudRouter } from './admin-crud.ts';
+import { webAuthnRouter } from './webauthn.ts';
 import {
   generateMemberNo,
   generateFamilyNo,
@@ -12,8 +26,74 @@ import type { Member, Family, FinancialTransaction } from '../src/types/index.ts
 
 export const apiRouter = Router();
 
-// Mount AI services
+// Hydrate the local SQLite working set from durable Postgres on a cold start,
+// and delay mutating responses until the snapshot has been committed.
+apiRouter.use(async (req, res, next) => {
+  if (!persistenceEnabled() || req.path.startsWith('/ai/')) return next();
+  try {
+    await preparePersistence();
+  } catch (error: any) {
+    console.error('[Persistence] Database cloud tidak siap:', error?.message || error);
+    return res.status(503).json({ success: false, message: 'Penyimpanan cloud sementara tidak dapat dihubungi. Coba beberapa saat lagi.' });
+  }
+
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  const originalJson = res.json.bind(res);
+  let responseStarted = false;
+  (res as any).json = (body: any) => {
+    if (responseStarted) return originalJson(body);
+    responseStarted = true;
+    if (res.statusCode >= 400 || body?.success === false) return originalJson(body);
+    persistSnapshot()
+      .then(() => originalJson(body))
+      .catch(() => {
+        if (!res.headersSent) {
+          res.status(500);
+          originalJson({ success: false, message: 'Perubahan belum berhasil disimpan ke penyimpanan cloud. Silakan coba lagi.' });
+        }
+      });
+    return res;
+  };
+  return next();
+});
+
+// Public pages only receive aggregate/content endpoints. Every private read or
+// mutation requires a server-issued session; hiding a menu in React is not an
+// authorization boundary.
+const PUBLIC_READ_PATHS = new Set(['/health', '/stats', '/events', '/schedules', '/announcements', '/rayons', '/categorials']);
+apiRouter.use((req, res, next) => {
+  const path = req.path.replace(/\/$/, '') || '/';
+  const publicWebAuthn = path === '/auth/webauthn/authentication-options' || path === '/auth/webauthn/authenticate';
+  if (req.method === 'OPTIONS' || path === '/auth/login' || path === '/auth/google' || publicWebAuthn) return next();
+  if (path.startsWith('/ai/')) return next();
+  if (req.method === 'GET' && PUBLIC_READ_PATHS.has(path)) return next();
+
+  const user = getRequestUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Sesi tidak valid atau sudah berakhir. Silakan masuk kembali.' });
+  }
+  (req as any).authUser = user;
+  res.setHeader('Cache-Control', 'no-store');
+
+  if ((path.startsWith('/users') || path.startsWith('/backup') || path.startsWith('/database') || path.startsWith('/audit-logs')) && !isSuperAdmin(user)) {
+    return res.status(403).json({ success: false, message: 'Hanya Super Admin yang dapat mengakses fitur ini.' });
+  }
+
+  if (user.role === 'Jemaat') {
+    const ownRead = req.method === 'GET' && ['/members', '/families', '/corrections'].includes(path);
+    const ownCorrection = req.method === 'POST' && path === '/corrections';
+    const ownWebAuthn = path.startsWith('/auth/webauthn/');
+    if (!ownRead && !ownCorrection && !ownWebAuthn) {
+      return res.status(403).json({ success: false, message: 'Akun Jemaat hanya dapat mengakses Portal Jemaat dan data dirinya sendiri.' });
+    }
+  }
+  next();
+});
+
+// Mount AI services and additional Super Admin CRUD controls
 apiRouter.use('/ai', aiRouter);
+apiRouter.use(adminCrudRouter);
+apiRouter.use('/auth/webauthn', webAuthnRouter);
 
 // Log audit action helper
 function addAuditLog(userId: string, userName: string, action: string, module: string, details: string) {
@@ -28,37 +108,55 @@ function addAuditLog(userId: string, userName: string, action: string, module: s
   }
 }
 
-// 1. Auth Login
+// 1. Auth Login. Legacy plaintext passwords are migrated after a successful login.
 apiRouter.post('/auth/login', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ success: false, message: 'Username dan kata sandi wajib diisi' });
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE username = ? AND password_hash = ? AND status = \'Aktif\'').get(username, password) as any;
-
-  if (!user) {
+  const user = findUserByUsername(String(username).trim());
+  if (!user || user.status !== 'Aktif' || !verifyPassword(user.password_hash, String(password))) {
     return res.status(401).json({ success: false, message: 'Nama pengguna atau kata sandi salah' });
   }
+  if (!String(user.password_hash).startsWith('scrypt$')) {
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), user.id);
+  }
 
+  const publicUser = toPublicUser(user);
   addAuditLog(user.id, user.name, 'Login Berhasil', 'Autentikasi', `Pengguna ${user.username} (${user.role}) masuk ke sistem`);
+  return res.json({ success: true, user: publicUser, token: issueSession(user.id) });
+});
 
-  return res.json({
-    success: true,
-    user: {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      rayonId: user.rayon_id,
-      memberId: user.member_id,
-      phone: user.phone,
-      email: user.email,
-      status: user.status,
-    },
-    token: `sysjeger-session-${user.id}-${Date.now()}`,
-  });
+apiRouter.post('/auth/google', async (req, res) => {
+  try {
+    const idToken = String(req.body?.idToken || '');
+    if (!idToken) return res.status(400).json({ success: false, message: 'Token Google wajib disertakan.' });
+    const profile = await verifyFirebaseGoogleToken(idToken);
+    const db = getDb();
+    let row = findUserByEmail(profile.email);
+    if (!row) {
+      const id = `google-${profile.uid}`;
+      const now = new Date().toISOString();
+      db.prepare(`INSERT INTO users (id, username, password_hash, name, role, rayon_id, member_id, phone, email, status, created_at)
+        VALUES (?, ?, ?, ?, 'Jemaat', NULL, NULL, '', ?, 'Aktif', ?)`)
+        .run(id, profile.email, hashPassword(`${profile.uid}:${Date.now()}`), profile.name, profile.email, now);
+      row = findUserByEmail(profile.email);
+    }
+    if (!row || row.status !== 'Aktif') return res.status(403).json({ success: false, message: 'Akun Google ini belum diaktifkan oleh Tata Usaha.' });
+    const user = toPublicUser(row);
+    addAuditLog(user.id, user.name, 'Login Google Berhasil', 'Autentikasi', `Pengguna ${user.username} masuk melalui Google terverifikasi`);
+    return res.json({ success: true, user, token: issueSession(user.id) });
+  } catch (error: any) {
+    return res.status(401).json({ success: false, message: error?.message || 'Verifikasi akun Google gagal.' });
+  }
+});
+
+apiRouter.get('/auth/session', (req, res) => {
+  const user = (req as any).authUser || getRequestUser(req);
+  if (!user) return res.status(401).json({ success: false, message: 'Sesi tidak aktif' });
+  res.json({ success: true, user, token: issueSession(user.id) });
 });
 
 function getSafeNextMemberNo(db: any): string {
@@ -101,6 +199,11 @@ apiRouter.get('/members', (req, res) => {
     WHERE 1=1
   `;
   const params: any[] = [];
+  const authUser = (req as any).authUser;
+  if (authUser?.role === 'Jemaat') {
+    sql += ' AND m.id = ?';
+    params.push(authUser.memberId || '__no_linked_member__');
+  }
 
   if (rayonId && rayonId !== 'all') {
     sql += ' AND m.rayon_id = ?';
@@ -182,10 +285,20 @@ apiRouter.post('/members', (req, res) => {
   }
 
   const memberNo = data.memberNo || getSafeNextMemberNo(db);
-  const id = 'm-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+  const requestedOfflineId = typeof data.id === 'string' && /^offline-[a-zA-Z0-9-]{1,120}$/.test(data.id) ? data.id : null;
+  const id = requestedOfflineId || 'm-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
   const now = new Date().toISOString().substring(0, 10);
 
   try {
+    if (requestedOfflineId) {
+      const existing = db.prepare('SELECT id, member_no, full_name FROM members WHERE id = ?').get(requestedOfflineId) as any;
+      if (existing) {
+        if (existing.full_name !== data.fullName) {
+          return res.status(409).json({ success: false, message: 'ID offline sudah digunakan oleh data jemaat lain.' });
+        }
+        return res.json({ success: true, id: existing.id, memberNo: existing.member_no, duplicate: true, message: 'Data offline sudah tersimpan sebelumnya.' });
+      }
+    }
     db.prepare(`
       INSERT INTO members (
         id, member_no, full_name, nickname, nik, family_card_no, family_id, family_role, gender,
@@ -383,13 +496,22 @@ apiRouter.delete('/members/:id', (req, res) => {
 // 3. Families CRUD
 apiRouter.get('/families', (req, res) => {
   const db = getDb();
+  const authUser = (req as any).authUser;
+  const params: any[] = [];
+  let where = '';
+  if (authUser?.role === 'Jemaat') {
+    const ownMember = db.prepare('SELECT family_id FROM members WHERE id = ?').get(authUser.memberId || '') as any;
+    where = 'WHERE f.id = ?';
+    params.push(ownMember?.family_id || '__no_linked_family__');
+  }
   const rows = db.prepare(`
     SELECT f.*, r.name as rayon_name,
       (SELECT count(*) FROM members WHERE family_id = f.id) as member_count
     FROM families f
     LEFT JOIN rayons r ON f.rayon_id = r.id
+    ${where}
     ORDER BY f.family_no ASC
-  `).all() as any[];
+  `).all(...params) as any[];
 
   const families: Family[] = rows.map((r) => ({
     id: r.id,
@@ -793,6 +915,7 @@ apiRouter.get('/events', (req, res) => {
       picName: e.pic_name,
       description: e.description || '',
       status: e.status,
+      imageUrl: e.image_url || '',
     })),
   });
 });
@@ -803,11 +926,45 @@ apiRouter.post('/events', (req, res) => {
   const id = 'ev-' + Date.now();
   try {
     db.prepare(`
-      INSERT INTO events (id, title, category, start_time, end_time, location, pic_name, description, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.title, data.category, data.startTime, data.endTime, data.location, data.picName, data.description || '', data.status || 'Terjadwal');
+      INSERT INTO events (id, title, category, start_time, end_time, location, pic_name, description, status, image_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, data.title, data.category, data.startTime, data.endTime, data.location, data.picName, data.description || '', data.status || 'Terjadwal', data.imageUrl || '');
     addAuditLog('admin', 'Admin', 'Tambah Jadwal Kegiatan', 'Ibadah & Kegiatan', `Membuat kegiatan baru: ${data.title}`);
-    res.json({ success: true, message: 'Kegiatan berhasil dijadwalkan' });
+    res.json({ success: true, message: 'Kegiatan berhasil dijadwalkan', id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+apiRouter.put('/events/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    const existing = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as any;
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Kegiatan tidak ditemukan' });
+    }
+    const value = (key: string, column: string) => data[key] !== undefined ? data[key] : existing[column];
+    db.prepare(`
+      UPDATE events
+      SET title = ?, category = ?, start_time = ?, end_time = ?, location = ?,
+          pic_name = ?, description = ?, status = ?, image_url = ?
+      WHERE id = ?
+    `).run(
+      value('title', 'title'),
+      value('category', 'category'),
+      value('startTime', 'start_time'),
+      value('endTime', 'end_time'),
+      value('location', 'location'),
+      value('picName', 'pic_name'),
+      value('description', 'description') || '',
+      value('status', 'status') || 'Terjadwal',
+      value('imageUrl', 'image_url') || '',
+      id
+    );
+    addAuditLog('admin', 'Admin', 'Perbarui Kegiatan', 'Agenda Kegiatan', `Memperbarui kegiatan: ${value('title', 'title')}`);
+    res.json({ success: true, message: 'Kegiatan berhasil diperbarui' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1123,10 +1280,88 @@ apiRouter.delete('/announcements/:id', (req, res) => {
   }
 });
 
+// Activity images are private working assets until attached to public warta.
+// The API keeps uploads available to password and Google admins alike.
+function mapActivityImage(row: any) {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    description: row.description || '',
+    url: row.url,
+    createdAt: row.created_at,
+    syncedAt: row.synced_at,
+    pendingSync: false,
+  };
+}
+
+function validateActivityImage(data: any): string | null {
+  const url = String(data?.url || '');
+  if (!data?.title || !String(data.title).trim()) return 'Judul foto kegiatan wajib diisi.';
+  if (String(data.title).length > 200 || String(data.category || '').length > 100 || String(data.description || '').length > 5000) return 'Metadata foto melebihi batas.';
+  if (url.length === 0 || url.length > 2_000_000) return 'Ukuran data foto harus kurang dari 2 MB setelah kompresi.';
+  if (!/^data:image\/(jpeg|png|webp);base64,[a-zA-Z0-9+/=\r\n]+$/.test(url) && !/^https:\/\//i.test(url)) return 'URL foto harus berupa gambar atau tautan HTTPS yang valid.';
+  return null;
+}
+
+apiRouter.get('/activity-images', (_req, res) => {
+  const rows = getDb().prepare('SELECT * FROM activity_images ORDER BY created_at DESC LIMIT 100').all() as any[];
+  res.json({ success: true, images: rows.map(mapActivityImage) });
+});
+
+apiRouter.post('/activity-images', (req, res) => {
+  const data = req.body || {};
+  const validationError = validateActivityImage(data);
+  if (validationError) return res.status(400).json({ success: false, message: validationError });
+  const id = String(data.id || `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) return res.status(400).json({ success: false, message: 'ID foto tidak valid.' });
+  const createdAt = data.createdAt && !Number.isNaN(Date.parse(data.createdAt)) ? new Date(data.createdAt).toISOString() : new Date().toISOString();
+  const syncedAt = new Date().toISOString();
+  try {
+    getDb().prepare(`INSERT INTO activity_images (id, title, category, description, url, created_at, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET title = excluded.title, category = excluded.category,
+        description = excluded.description, url = excluded.url, synced_at = excluded.synced_at`)
+      .run(id, String(data.title).trim(), String(data.category || 'Kegiatan Jemaat').trim(), String(data.description || ''), data.url, createdAt, syncedAt);
+    const row = getDb().prepare('SELECT * FROM activity_images WHERE id = ?').get(id);
+    const user = (req as any).authUser;
+    addAuditLog(user?.id || 'admin', user?.name || 'Admin', 'Unggah Foto Kegiatan', 'Galeri Kegiatan', `Menyimpan foto: ${String(data.title).trim()}`);
+    res.json({ success: true, image: mapActivityImage(row), message: 'Foto kegiatan berhasil disimpan.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error?.message || 'Foto gagal disimpan.' });
+  }
+});
+
+apiRouter.put('/activity-images/:id', (req, res) => {
+  const db = getDb();
+  const old = db.prepare('SELECT * FROM activity_images WHERE id = ?').get(req.params.id) as any;
+  if (!old) return res.status(404).json({ success: false, message: 'Foto tidak ditemukan.' });
+  const data = {
+    title: req.body?.title ?? old.title,
+    category: req.body?.category ?? old.category,
+    description: req.body?.description ?? old.description,
+    url: req.body?.url ?? old.url,
+  };
+  const validationError = validateActivityImage(data);
+  if (validationError) return res.status(400).json({ success: false, message: validationError });
+  db.prepare('UPDATE activity_images SET title = ?, category = ?, description = ?, url = ?, synced_at = ? WHERE id = ?')
+    .run(String(data.title).trim(), String(data.category).trim(), String(data.description || ''), data.url, new Date().toISOString(), req.params.id);
+  res.json({ success: true, image: mapActivityImage(db.prepare('SELECT * FROM activity_images WHERE id = ?').get(req.params.id)) });
+});
+
+apiRouter.delete('/activity-images/:id', (req, res) => {
+  const result = getDb().prepare('DELETE FROM activity_images WHERE id = ?').run(req.params.id);
+  if (result.changes === 0) return res.status(404).json({ success: false, message: 'Foto tidak ditemukan.' });
+  res.json({ success: true, message: 'Foto kegiatan berhasil dihapus.' });
+});
+
 // 13. Data Correction Requests (from Jemaat Portal)
 apiRouter.get('/corrections', (req, res) => {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM data_correction_requests ORDER BY request_date DESC').all() as any[];
+  const authUser = (req as any).authUser;
+  const rows = authUser?.role === 'Jemaat'
+    ? db.prepare('SELECT * FROM data_correction_requests WHERE member_id = ? ORDER BY request_date DESC').all(authUser.memberId || '') as any[]
+    : db.prepare('SELECT * FROM data_correction_requests ORDER BY request_date DESC').all() as any[];
   res.json({
     success: true,
     corrections: rows.map(c => ({
@@ -1143,7 +1378,17 @@ apiRouter.get('/corrections', (req, res) => {
 
 apiRouter.post('/corrections', (req, res) => {
   const db = getDb();
-  const data = req.body;
+  const data = { ...(req.body || {}) };
+  const authUser = (req as any).authUser;
+  if (authUser?.role === 'Jemaat') {
+    const ownMember = db.prepare('SELECT id, full_name FROM members WHERE id = ?').get(authUser.memberId || '') as any;
+    if (!ownMember) return res.status(403).json({ success: false, message: 'Akun belum tertaut ke data jemaat.' });
+    data.memberId = ownMember.id;
+    data.memberName = ownMember.full_name;
+  }
+  if (!data.memberId || !data.memberName || !String(data.details || '').trim()) {
+    return res.status(400).json({ success: false, message: 'Data jemaat dan rincian koreksi wajib diisi.' });
+  }
   const id = 'cr-' + Date.now();
   const now = new Date().toISOString().substring(0, 10);
 
@@ -1151,7 +1396,7 @@ apiRouter.post('/corrections', (req, res) => {
     db.prepare(`
       INSERT INTO data_correction_requests (id, member_id, member_name, request_date, details, status, admin_notes)
       VALUES (?, ?, ?, ?, ?, 'Menunggu', '')
-    `).run(id, data.memberId, data.memberName, now, data.details);
+    `).run(id, data.memberId, data.memberName, now, String(data.details).trim());
 
     addAuditLog(data.memberId, data.memberName, 'Ajukan Pembaruan Data', 'Portal Jemaat', `Warga jemaat ${data.memberName} mengajukan koreksi biodata`);
     res.json({ success: true, message: 'Pengajuan koreksi biodata berhasil dikirimkan ke tata usaha gereja' });
@@ -1174,6 +1419,10 @@ apiRouter.put('/corrections/:id', (req, res) => {
 });
 
 // 14. Dashboard Statistics
+apiRouter.get('/health', (_req, res) => {
+  res.json({ success: true, service: 'sysjeger-api', storage: persistenceMode(), timestamp: new Date().toISOString() });
+});
+
 apiRouter.get('/stats', (req, res) => {
   const db = getDb();
 
@@ -1344,15 +1593,17 @@ apiRouter.post('/import/members', (req, res) => {
 apiRouter.get('/backup', (req, res) => {
   const db = getDb();
   const tables = [
-    'users', 'rayons', 'categorial_groups', 'families', 'members',
+    'users', 'webauthn_credentials', 'rayons', 'categorial_groups', 'families', 'members',
     'church_staff', 'baptisms', 'confirmations', 'marriages', 'member_mutations',
     'events', 'service_schedules', 'attendance_records', 'financial_transactions',
-    'documents', 'announcements', 'data_correction_requests', 'audit_logs'
+    'documents', 'announcements', 'activity_images', 'data_correction_requests', 'audit_logs'
   ];
 
   const backupData: Record<string, any[]> = {};
   for (const t of tables) {
-    backupData[t] = db.prepare(`SELECT * FROM ${t}`).all();
+    const rows = db.prepare(`SELECT * FROM ${t}`).all() as any[];
+    // A downloadable backup must never contain password hashes.
+    backupData[t] = t === 'users' ? rows.map(({ password_hash: _passwordHash, ...safeUser }) => safeUser) : rows;
   }
 
   addAuditLog('admin', 'Admin', 'Pencadangan Database', 'Backup & Restore', `Mengunduh berkas cadangan database SYSJEGER GMIT Betel Fuimelang`);

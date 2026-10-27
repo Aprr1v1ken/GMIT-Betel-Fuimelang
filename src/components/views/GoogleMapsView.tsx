@@ -49,58 +49,35 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
   const [mapZoom, setMapZoom] = useState(14);
   const [center, setCenter] = useState(defaultCenter);
 
-  // Predefined key locations for GMIT Betel Fuimelang and Rayons
+  // Church and rayon locations use the current administrative records. Only
+  // coordinates are defaults; names, leaders, phones, and coverage are live data.
+  const rayonPositions = [
+    { lat: -8.2365, lng: 124.579 },
+    { lat: -8.241, lng: 124.5825 },
+    { lat: -8.234, lng: 124.584 },
+    { lat: -8.245, lng: 124.575 },
+  ];
   const churchLocations: ChurchPoint[] = [
     {
       id: 'church_main',
       name: 'Gedung Gereja GMIT Betel Fuimelang',
       category: 'church',
-      position: { lat: -8.2384, lng: 124.5802 },
+      position: defaultCenter,
       description: 'Pusat Ibadah Raya, Kantor Majelis Jemaat, dan Gedung Kebaktian Utama GMIT Betel Fuimelang.',
       leader: 'Pdt. Sonya W. Isu, S.Th (Ketua Majelis)',
       phone: '085173095482',
       memberCount: members.length,
     },
-    {
-      id: 'rayon_1',
-      name: 'Pos Pelayanan Rayon I (Fuimelang Pusat)',
-      category: 'rayon',
-      position: { lat: -8.2365, lng: 124.579 },
-      description: 'Cakupan wilayah: Fuimelang Pusat, Jalan Raya & Pasar Lama.',
-      leader: 'Pnt. Yulius Banamtuan',
-      phone: '0812-3901-4411',
-      memberCount: members.filter((m) => m.rayonName === 'Rayon I' || m.rayonId === 'r1').length,
-    },
-    {
-      id: 'rayon_2',
-      name: 'Pos Pelayanan Rayon II (Kompleks SD Betel & Liku)',
-      category: 'rayon',
-      position: { lat: -8.241, lng: 124.5825 },
-      description: 'Cakupan wilayah: Kompleks SD Betel, Pemukiman Liku & Pertanian.',
-      leader: 'Pnt. Sarah Lopo-Mone',
-      phone: '0813-5322-8877',
-      memberCount: members.filter((m) => m.rayonName === 'Rayon II' || m.rayonId === 'r2').length,
-    },
-    {
-      id: 'rayon_3',
-      name: 'Pos Pelayanan Rayon III (Fuimelang Atas)',
-      category: 'rayon',
-      position: { lat: -8.234, lng: 124.584 },
-      description: 'Cakupan wilayah: Fuimelang Atas, Perbukitan & Kebun Sirih.',
-      leader: 'Pnt. Soleman Malaikosa',
-      phone: '0852-3911-0022',
-      memberCount: members.filter((m) => m.rayonName === 'Rayon III' || m.rayonId === 'r3').length,
-    },
-    {
-      id: 'rayon_4',
-      name: 'Pos Pelayanan Rayon IV (Pesisir & Dermaga)',
-      category: 'rayon',
-      position: { lat: -8.245, lng: 124.575 },
-      description: 'Cakupan wilayah: Pesisir Pantai, Dermaga & Kompleks Nelayan Moru.',
-      leader: 'Pnt. Martha Doko-Lobo',
-      phone: '0821-4455-6677',
-      memberCount: members.filter((m) => m.rayonName === 'Rayon IV' || m.rayonId === 'r4').length,
-    },
+    ...rayons.map((rayon, index) => ({
+      id: `rayon_${rayon.id}`,
+      name: `Pos Pelayanan ${rayon.name}`,
+      category: 'rayon' as const,
+      position: rayonPositions[index % rayonPositions.length],
+      description: rayon.coverageArea || 'Wilayah pelayanan rayon GMIT Betel Fuimelang.',
+      leader: rayon.leaderName || 'Koordinator belum diisi',
+      phone: rayon.leaderPhone || '',
+      memberCount: members.filter((m) => m.rayonId === rayon.id).length,
+    })),
   ];
 
   // Map family residences around rayon sectors based on real members
@@ -152,7 +129,7 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
               Peta Pelayanan & Sebaran Rayon
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Pemetaan interaktif Gedung Gereja Betel Fuimelang, 4 Pos Pelayanan Rayon, dan sebaran tempat tinggal jemaat di Desa Lembur Tengah, Klasis Alor Tengah Utara, Kabupaten Alor, Nusa Tenggara Timur.
+              Pemetaan interaktif Gedung Gereja Betel Fuimelang, {rayons.length} Pos Pelayanan Rayon, dan sebaran tempat tinggal jemaat di Desa Lembur Tengah, Klasis Alor Tengah Utara, Kabupaten Alor, Nusa Tenggara Timur.
             </p>
           </div>
 

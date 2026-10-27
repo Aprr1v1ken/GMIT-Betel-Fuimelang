@@ -36,6 +36,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoSource, setPhotoSource] = useState<string>('');
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Member>>({
     fullName: '',
@@ -46,8 +47,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     familyRole: 'Anggota' as any,
     gender: 'Laki-laki',
     birthPlace: 'Fuimelang',
-    birthDate: '1995-01-01',
-    address: 'Jl. Timor Raya No. 12',
+    birthDate: '',
+    address: '',
     kelurahan: 'Fuimelang',
     kecamatan: 'Alor Tengah Utara',
     kabupaten: 'Alor',
@@ -58,7 +59,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     rayonId: rayons[0]?.id || 'r1',
     categorialGroupId: categorials[0]?.id || 'c1',
     membershipStatus: 'Tetap',
-    baptismStatus: 'Sudah',
+    baptismStatus: 'Belum',
     baptismDate: '',
     confirmationStatus: 'Belum',
     confirmationDate: '',
@@ -84,8 +85,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         familyRole: 'Anak',
         gender: 'Laki-laki',
         birthPlace: 'Fuimelang',
-        birthDate: '1995-01-01',
-        address: 'Desa Lembur Tengah RT 01',
+        birthDate: '',
+        address: '',
         kelurahan: 'Lembur Tengah',
         kecamatan: 'Alor Tengah Utara',
         kabupaten: 'Alor',
@@ -96,7 +97,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         rayonId: rayons[0]?.id || 'r1',
         categorialGroupId: categorials[0]?.id || 'c1',
         membershipStatus: 'Tetap',
-        baptismStatus: 'Sudah',
+        baptismStatus: 'Belum',
         baptismDate: '',
         confirmationStatus: 'Belum',
         confirmationDate: '',
@@ -114,8 +115,6 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   }, [member, isOpen, rayons, categorials, families]);
 
   if (!isOpen) return null;
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (field: keyof Member, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -420,7 +419,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
               {/* Tanggal Lahir dengan Sistem Kalender Otomatis */}
               <div>
                 <CalendarDatePicker
-                  value={formData.birthDate || '1995-01-01'}
+                  value={formData.birthDate || ''}
                   onChange={(val) => handleChange('birthDate', val)}
                   label="Tanggal Lahir (Sistem Kalender Otomatis)"
                   required

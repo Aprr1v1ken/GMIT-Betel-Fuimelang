@@ -363,7 +363,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             {/* Watermark Crest */}
             <div className="absolute right-4 -bottom-6 opacity-10 pointer-events-none w-48 h-48">
               <img
-                src="/src/assets/images/regenerated_image_1792510154483.png"
+                src="/images/regenerated_image_1792510154483.png"
                 alt="GMIT"
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
@@ -374,7 +374,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             <div className={`flex items-center justify-between border-b ${currentTheme.dividerColor} pb-3 mb-4`}>
               <div className="flex items-center gap-3">
                 <img
-                  src="/src/assets/images/regenerated_image_1792510154483.png"
+                  src="/images/regenerated_image_1792510154483.png"
                   alt="GMIT Logo"
                   className="w-10 h-10 rounded-full border border-amber-400/60 object-cover shadow-sm shrink-0"
                   referrerPolicy="no-referrer"

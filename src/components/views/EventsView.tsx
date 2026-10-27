@@ -21,10 +21,19 @@ import {
 import type { ChurchEvent, ServiceSchedule } from '../../types/index.ts';
 import { uploadActivityImageToCloud } from '../../services/cloud-sync.ts';
 
+function defaultEventDateTime(hour: number) {
+  const date = new Date();
+  date.setHours(hour, 0, 0, 0);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(hour)}:00:00`;
+}
+
 interface EventsViewProps {
   events: ChurchEvent[];
   schedules: ServiceSchedule[];
   onAddEvent: (data: Partial<ChurchEvent>) => Promise<void>;
+  onUpdateEvent?: (id: string, data: Partial<ChurchEvent>) => Promise<void>;
+  onDeleteEvent?: (id: string) => Promise<void>;
   onAddSchedule: (data: Partial<ServiceSchedule>) => Promise<void>;
   onUpdateSchedule?: (id: string, data: Partial<ServiceSchedule>) => Promise<void>;
   onDeleteSchedule?: (id: string) => Promise<void>;
@@ -36,6 +45,8 @@ export const EventsView: React.FC<EventsViewProps> = ({
   events,
   schedules,
   onAddEvent,
+  onUpdateEvent,
+  onDeleteEvent,
   onAddSchedule,
   onUpdateSchedule,
   onDeleteSchedule,
@@ -46,6 +57,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ServiceSchedule | null>(null);
+  const [editingEvent, setEditingEvent] = useState<ChurchEvent | null>(null);
 
   // Schedule form states
   const [serviceDate, setServiceDate] = useState('25-10-2026');
@@ -65,14 +77,15 @@ export const EventsView: React.FC<EventsViewProps> = ({
   // Event form states
   const [eventTitle, setEventTitle] = useState('');
   const [eventCat, setEventCat] = useState<any>('Ibadah Minggu');
-  const [eventStart, setEventStart] = useState('2026-10-25 08:00:00');
-  const [eventEnd, setEventEnd] = useState('2026-10-25 10:00:00');
+  const [eventStart, setEventStart] = useState(defaultEventDateTime(8));
+  const [eventEnd, setEventEnd] = useState(defaultEventDateTime(10));
   const [eventLocation, setEventLocation] = useState('Gedung Kebaktian Utama Betel');
   const [eventPic, setEventPic] = useState('');
   const [eventDesc, setEventDesc] = useState('');
   const [eventImageUrl, setEventImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [cloudSyncedImage, setCloudSyncedImage] = useState(false);
+  const [imageSyncPending, setImageSyncPending] = useState(false);
   const [savingEvent, setSavingEvent] = useState(false);
 
   const openAddScheduleModal = () => {
@@ -170,6 +183,36 @@ export const EventsView: React.FC<EventsViewProps> = ({
     }
   };
 
+  const openAddEventModal = () => {
+    setEditingEvent(null);
+    setEventTitle('');
+    setEventCat('Ibadah Minggu');
+    setEventStart(defaultEventDateTime(8));
+    setEventEnd(defaultEventDateTime(10));
+    setEventLocation('Gedung Kebaktian Utama Betel');
+    setEventPic('');
+    setEventDesc('');
+    setEventImageUrl('');
+    setCloudSyncedImage(false);
+    setImageSyncPending(false);
+    setShowEventModal(true);
+  };
+
+  const openEditEventModal = (event: ChurchEvent) => {
+    setEditingEvent(event);
+    setEventTitle(event.title);
+    setEventCat(event.category);
+    setEventStart(event.startTime);
+    setEventEnd(event.endTime);
+    setEventLocation(event.location);
+    setEventPic(event.picName);
+    setEventDesc(event.description || '');
+    setEventImageUrl(event.imageUrl || '');
+    setCloudSyncedImage(Boolean(event.imageUrl));
+    setImageSyncPending(false);
+    setShowEventModal(true);
+  };
+
   const handleEventImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -202,12 +245,13 @@ export const EventsView: React.FC<EventsViewProps> = ({
 
           // Upload directly to Cloud Firestore activity_images
           try {
-            await uploadActivityImageToCloud(compressed, {
+            const record = await uploadActivityImageToCloud(compressed, {
               title: eventTitle || 'Dokumentasi Acara Jemaat',
               category: eventCat,
               description: eventDesc,
             });
-            setCloudSyncedImage(true);
+            setCloudSyncedImage(!record.pendingSync);
+            setImageSyncPending(Boolean(record.pendingSync));
           } catch (cloudErr) {
             console.warn('Gagal sync gambar ke cloud Firestore:', cloudErr);
           }
@@ -226,7 +270,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
     if (!eventTitle.trim()) return;
     setSavingEvent(true);
     try {
-      await onAddEvent({
+      const payload: Partial<ChurchEvent> = {
         title: eventTitle,
         category: eventCat,
         startTime: eventStart,
@@ -234,14 +278,21 @@ export const EventsView: React.FC<EventsViewProps> = ({
         location: eventLocation,
         picName: eventPic,
         description: eventDesc,
-        status: 'Terjadwal',
+        status: editingEvent?.status || 'Terjadwal',
         imageUrl: eventImageUrl,
-      });
+      };
+      if (editingEvent && onUpdateEvent) {
+        await onUpdateEvent(editingEvent.id, payload);
+      } else {
+        await onAddEvent(payload);
+      }
       setShowEventModal(false);
+      setEditingEvent(null);
       setEventTitle('');
       setEventDesc('');
       setEventImageUrl('');
       setCloudSyncedImage(false);
+      setImageSyncPending(false);
     } catch (err) {
       console.error(err);
     } finally {
@@ -296,11 +347,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                 </button>
               )}
               <button
-                onClick={() => {
-                  setEventImageUrl('');
-                  setCloudSyncedImage(false);
-                  setShowEventModal(true);
-                }}
+                onClick={openAddEventModal}
                 className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
@@ -469,7 +516,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
             Silakan tambahkan agenda kebaktian rayon, persekutuan kategorial, rapat majelis, atau kegiatan pelayanan lainnya.
           </p>
           <button
-            onClick={() => setShowEventModal(true)}
+            onClick={openAddEventModal}
             className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -530,6 +577,20 @@ export const EventsView: React.FC<EventsViewProps> = ({
                 <p className="text-xs text-slate-400 pt-3 border-t border-slate-800 line-clamp-2">
                   {ev.description}
                 </p>
+              )}
+              {(onUpdateEvent || onDeleteEvent) && (
+                <div className="flex gap-2 pt-3 border-t border-slate-800">
+                  {onUpdateEvent && (
+                    <button onClick={() => openEditEventModal(ev)} className="flex-1 py-1.5 rounded-lg bg-slate-800 text-cyan-300 text-xs flex items-center justify-center gap-1.5 hover:bg-slate-700">
+                      <Edit2 className="w-3 h-3" /> Ubah
+                    </button>
+                  )}
+                  {onDeleteEvent && (
+                    <button onClick={() => { if (window.confirm(`Hapus kegiatan "${ev.title}"?`)) void onDeleteEvent(ev.id); }} className="flex-1 py-1.5 rounded-lg bg-rose-950/60 text-rose-300 text-xs flex items-center justify-center gap-1.5 hover:bg-rose-900/70">
+                      <Trash2 className="w-3 h-3" /> Hapus
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))}
@@ -619,7 +680,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                     type="text"
                     value={elderDuty}
                     onChange={(e) => setElderDuty(e.target.value)}
-                    placeholder="Pnt. Yulius Banamtuan"
+                    placeholder="Nama penatua / pelayan"
                     className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
                   />
                 </div>
@@ -629,7 +690,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                     type="text"
                     value={deaconDuty}
                     onChange={(e) => setDeaconDuty(e.target.value)}
-                    placeholder="Dkn. Elisabeth Lopo"
+                    placeholder="Nama diaken / pelayan"
                     className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none focus:border-amber-400"
                   />
                 </div>
@@ -718,7 +779,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
             <h3 className="text-base font-bold text-amber-300">
-              Tambah Kegiatan / Acara Gerejawi
+              {editingEvent ? 'Ubah Kegiatan / Acara Gerejawi' : 'Tambah Kegiatan / Acara Gerejawi'}
             </h3>
 
             <form onSubmit={handleSaveEvent} className="space-y-3">
@@ -793,7 +854,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                   type="text"
                   value={eventPic}
                   onChange={(e) => setEventPic(e.target.value)}
-                  placeholder="Pnt. Yulius Banamtuan"
+                  placeholder="Nama penatua / pelayan"
                   className="w-full px-3 py-2 bg-[#050811] border border-slate-700 rounded-lg text-white outline-none"
                 />
               </div>
@@ -822,12 +883,16 @@ export const EventsView: React.FC<EventsViewProps> = ({
                       <span>Tersimpan di Cloud</span>
                     </span>
                   )}
+                  {imageSyncPending && (
+                    <span className="text-[10px] text-amber-300 font-bold">Tersimpan di perangkat · menunggu sinkron</span>
+                  )}
                   {eventImageUrl && !cloudSyncedImage && (
                     <button
                       type="button"
                       onClick={() => {
                         setEventImageUrl('');
                         setCloudSyncedImage(false);
+                        setImageSyncPending(false);
                       }}
                       className="text-[10px] text-red-400 hover:underline cursor-pointer"
                     >
@@ -871,7 +936,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                   disabled={savingEvent}
                   className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
                 >
-                  {savingEvent ? 'Menyimpan...' : 'Jadwalkan Acara'}
+                  {savingEvent ? 'Menyimpan...' : editingEvent ? 'Simpan Perubahan' : 'Jadwalkan Acara'}
                 </button>
               </div>
             </form>

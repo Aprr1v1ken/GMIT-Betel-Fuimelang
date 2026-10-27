@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
-import { FolderArchive, Plus, Search, FileText, Download, ShieldCheck, Lock } from 'lucide-react';
+import { FolderArchive, Plus, Search, FileText, Download, ShieldCheck, Lock, Edit2, Trash2, X } from 'lucide-react';
 import type { DocumentRecord } from '../../types/index.ts';
 
 interface DocumentsViewProps {
   documents: DocumentRecord[];
   onAddDocument: (data: Partial<DocumentRecord>) => Promise<void>;
+  onUpdateDocument?: (id: string, data: Partial<DocumentRecord>) => Promise<void>;
+  onDeleteDocument?: (id: string) => Promise<void>;
 }
 
 export const DocumentsView: React.FC<DocumentsViewProps> = ({
   documents,
   onAddDocument,
+  onUpdateDocument,
+  onDeleteDocument,
 }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<DocumentRecord | null>(null);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
@@ -33,23 +39,49 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     );
   });
 
+  const openAdd = () => {
+    setEditing(null);
+    setTitle('');
+    setCategory('Warta Gereja');
+    setAccessLevel('Publik');
+    setFileName('');
+    setFileSize('');
+    setError('');
+    setShowModal(true);
+  };
+
+  const openEdit = (doc: DocumentRecord) => {
+    setEditing(doc);
+    setTitle(doc.title);
+    setCategory(doc.category);
+    setAccessLevel(doc.accessLevel);
+    setFileName(doc.fileName);
+    setFileSize(doc.fileSize);
+    setError('');
+    setShowModal(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
+    setError('');
+    const payload: Partial<DocumentRecord> = {
+      title: title.trim(),
+      category,
+      accessLevel,
+      fileName: fileName.trim() || `${title.trim().replace(/\s+/g, '_')}.pdf`,
+      fileSize: fileSize || 'Belum diunggah',
+    };
     try {
-      await onAddDocument({
-        title,
-        category,
-        accessLevel,
-        fileName: fileName || `${title.replace(/\s+/g, '_')}.pdf`,
-        fileSize,
-      });
+      if (editing && onUpdateDocument) await onUpdateDocument(editing.id, payload);
+      else await onAddDocument(payload);
       setShowModal(false);
+      setEditing(null);
       setTitle('');
       setFileName('');
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setError(err?.message || 'Dokumen tidak dapat disimpan.');
     } finally {
       setSaving(false);
     }
@@ -82,7 +114,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openAdd}
           className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-sm cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -175,15 +207,10 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                       <span>{d.accessLevel}</span>
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => handleDownload(d)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-                      title="Unduh Berkas"
-                    >
-                      <Download className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Unduh</span>
-                    </button>
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                    <button onClick={() => handleDownload(d)} className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-200" title="Unduh Berkas"><Download className="w-3.5 h-3.5 text-amber-400" /><span>Unduh</span></button>
+                    {onUpdateDocument && <button onClick={() => openEdit(d)} className="p-1.5 ml-1 text-slate-400 hover:text-cyan-300" title="Ubah dokumen"><Edit2 className="w-3.5 h-3.5" /></button>}
+                    {onDeleteDocument && <button onClick={() => { if (window.confirm(`Hapus arsip "${d.title}"?`)) void onDeleteDocument(d.id).catch((err: any) => setError(err?.message || 'Dokumen tidak dapat dihapus.')); }} className="p-1.5 text-slate-400 hover:text-rose-300" title="Hapus dokumen"><Trash2 className="w-3.5 h-3.5" /></button>}
                   </td>
                 </tr>
               ))}
@@ -196,10 +223,8 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
-            <h3 className="text-base font-bold text-amber-300">
-              Registrasi Dokumen Digital
-            </h3>
-
+            <div className="flex items-center justify-between"><h3 className="text-base font-bold text-amber-300">{editing ? 'Ubah Dokumen Digital' : 'Registrasi Dokumen Digital'}</h3><button type="button" onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-white" aria-label="Tutup"><X className="w-4 h-4" /></button></div>
+            {error && <div role="alert" className="p-2 rounded-lg bg-rose-950/60 text-rose-200">{error}</div>}
             <form onSubmit={handleSave} className="space-y-3">
               <div>
                 <label className="block font-semibold text-slate-300 mb-1">Judul Dokumen *</label>

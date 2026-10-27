@@ -47,6 +47,7 @@ import {
   generateSundaySchoolApi,
   generateBibleStudyApi,
   generateChurchNewsApi,
+  fetchAiStatusApi,
 } from '../../services/api.ts';
 import {
   uploadActivityImageToCloud,
@@ -92,82 +93,93 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     }
   }, [initialTab]);
   const [loading, setLoading] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAiStatusApi()
+      .then((status) => setAiConfigured(Boolean(status.configured)))
+      .catch(() => setAiConfigured(false));
+  }, []);
   const [copied, setCopied] = useState(false);
   const [savedToWarta, setSavedToWarta] = useState(false);
 
   // Tab 0 / Tab 11: AI Berita & Agenda Kegiatan Gereja (Dual Mode)
   const [newsMode, setNewsMode] = useState<'news' | 'agenda'>('news');
   const [newsCategory, setNewsCategory] = useState('Bakti Jumat & Gotong Royong');
-  const [newsTitle, setNewsTitle] = useState('Aksi Bakti Bersih Lingkungan Gereja dan Penataan Pekarangan');
+  const [newsTitle, setNewsTitle] = useState('');
   const [newsDate, setNewsDate] = useState(new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-'));
   const [newsStartTime, setNewsStartTime] = useState('07:30');
   const [newsEndTime, setNewsEndTime] = useState('11:30');
   const [newsLocation, setNewsLocation] = useState('Kompleks Gedung Gereja Betel Fuimelang & Pastori');
-  const [newsCoordinator, setNewsCoordinator] = useState('BPPJ & Seksi Pembangunan Pemuda');
-  const [newsParticipants, setNewsParticipants] = useState('Presbiter, Pemuda GMIT, dan Seluruh Anggota Rayon 1 - 4');
-  const [newsNotes, setNewsNotes] = useState('Pembersihan selokan air jelang musim hujan, perbaikan pagar bambu, penanaman bunga pekarangan gereja, dan ditutup dengan perjamuan kasih ubi rebus dan kopi jahe Alor.');
-  const [newsImageUrl, setNewsImageUrl] = useState('/src/assets/images/regenerated_image_1792335390161.png');
+  const [newsCoordinator, setNewsCoordinator] = useState('');
+  const [newsParticipants, setNewsParticipants] = useState('');
+  const [newsNotes, setNewsNotes] = useState('');
+  const [newsImageUrl, setNewsImageUrl] = useState('');
   const [newsResult, setNewsResult] = useState('');
   const [savedNewsToWarta, setSavedNewsToWarta] = useState(false);
   const [savedAgendaToCalendar, setSavedAgendaToCalendar] = useState(false);
   const [cloudUploading, setCloudUploading] = useState(false);
   const [cloudSavedImageId, setCloudSavedImageId] = useState('');
+  const [imageSyncPending, setImageSyncPending] = useState(false);
   const [recentCloudImages, setRecentCloudImages] = useState<CloudActivityImage[]>([]);
   const [showCloudGallery, setShowCloudGallery] = useState(false);
 
-  // Fetch recent activity images from Cloud Firestore
+  // Fetch recent activity images and retry pending uploads when internet returns.
   useEffect(() => {
-    fetchActivityImagesFromCloud()
-      .then((imgs) => {
-        if (imgs && imgs.length > 0) {
-          setRecentCloudImages(imgs);
-        }
-      })
-      .catch((err) => console.warn('Could not load cloud images:', err));
+    let mounted = true;
+    const refreshGallery = () => {
+      fetchActivityImagesFromCloud()
+        .then((imgs) => { if (mounted) setRecentCloudImages(imgs || []); })
+        .catch((err) => console.warn('Could not load cloud images:', err));
+    };
+    refreshGallery();
+    window.addEventListener('online', refreshGallery);
+    return () => {
+      mounted = false;
+      window.removeEventListener('online', refreshGallery);
+    };
   }, []);
 
   // Tab 1: AI Konseling & Bimbingan Iman Rohani
   const [counselingCategory, setCounselingCategory] = useState('pergumulan-hidup');
-  const [counselingTopic, setCounselingTopic] = useState('Mengatasi Kekhawatiran Hidup & Rezeki Keluarga');
-  const [counselingQuestion, setCounselingQuestion] = useState(
-    'Bagaimana seorang Kristen menghadapi saat-saat di mana hasil panen berkurang dan kebutuhan biaya sekolah anak sangat mendesak tanpa putus asa?'
-  );
-  const [counselingContext, setCounselingContext] = useState('Warga jemaat GMIT Betel Fuimelang di Desa Lembur Tengah Alor');
+  const [counselingTopic, setCounselingTopic] = useState('');
+  const [counselingQuestion, setCounselingQuestion] = useState('');
+  const [counselingContext, setCounselingContext] = useState('');
   const [counselingResult, setCounselingResult] = useState('');
 
   // Tab 2: AI Santapan Rohani Harian
   const [devotionalTiming, setDevotionalTiming] = useState('Renungan Pagi Hari');
-  const [devotionalTheme, setDevotionalTheme] = useState('Rahmat Baru di Setiap Fajar');
-  const [devotionalScripture, setDevotionalScripture] = useState('Ratapan 3:22-23');
+  const [devotionalTheme, setDevotionalTheme] = useState('');
+  const [devotionalScripture, setDevotionalScripture] = useState('');
   const [devotionalAudience, setDevotionalAudience] = useState('Keluarga Kristen GMIT');
   const [devotionalResult, setDevotionalResult] = useState('');
 
   // Tab 3: AI Penuntun Liturgi Khusus
   const [liturgyServiceType, setLiturgyServiceType] = useState('Ibadah Rumah Tangga / Persekutuan Rayon');
-  const [liturgyTheme, setLiturgyTheme] = useState('Keluarga yang Berakar dan Berbuah di Dalam Kristus');
-  const [liturgyScripture, setLiturgyScripture] = useState('Yosua 24:15');
-  const [liturgyRayon, setLiturgyRayon] = useState('Rayon I GMIT Betel Fuimelang');
+  const [liturgyTheme, setLiturgyTheme] = useState('');
+  const [liturgyScripture, setLiturgyScripture] = useState('');
+  const [liturgyRayon, setLiturgyRayon] = useState('');
   const [liturgyResult, setLiturgyResult] = useState('');
 
   // Tab 4: AI Sekolah Minggu & Pembina PAR GMIT
   const [ssAgeGroup, setSsAgeGroup] = useState('Anak Tanggung (Usia 7-10 Tahun / SD)');
-  const [ssStoryTheme, setSsStoryTheme] = useState('Yesus Meredakan Angin Ribut di Danau');
-  const [ssScripture, setSsScripture] = useState('Markus 4:35-41');
+  const [ssStoryTheme, setSsStoryTheme] = useState('');
+  const [ssScripture, setSsScripture] = useState('');
   const [sundaySchoolResult, setSundaySchoolResult] = useState('');
 
   // Tab 5: AI Penelaahan Alkitab (PA Rayon)
-  const [paScripture, setPaScripture] = useState('Yakobus 2:14-26');
-  const [paTopic, setPaTopic] = useState('Iman Tanpa Perbuatan Adalah Mati');
+  const [paScripture, setPaScripture] = useState('');
+  const [paTopic, setPaTopic] = useState('');
   const [paAudience, setPaAudience] = useState('Persekutuan Doa Rayon I s/d IV GMIT Betel Fuimelang');
   const [paResult, setPaResult] = useState('');
 
   // Tab 6: Sermon State
   const [serviceType, setServiceType] = useState('Ibadah Minggu');
-  const [scripture, setScripture] = useState('Mazmur 23:1-6');
-  const [topic, setTopic] = useState('Tuhan Gembala yang Memelihara Umat-Nya');
+  const [scripture, setScripture] = useState('');
+  const [topic, setTopic] = useState('');
   const [liturgicalSeason, setLiturgicalSeason] = useState('Umum / Trinitas');
-  const [contextNotes, setContextNotes] = useState('Jemaat mayoritas bertani dan berkebun di Desa Lembur Tengah Alor, saling tolong-menolong dalam persekutuan.');
+  const [contextNotes, setContextNotes] = useState('');
   const [sermonResult, setSermonResult] = useState('');
 
   // Tab 7: Pastoral Prayer State
@@ -181,13 +193,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
   // Tab 8: Warta State
   const [bulletinDate, setBulletinDate] = useState(new Date().toISOString().substring(0, 10));
-  const [bulletinItems, setBulletinItems] = useState<string[]>([
-    'Ibadah Minggu Pagi pkl 08.00 WITA dilayani oleh Pendeta Ketua Majelis Jemaat',
-    'Ibadah Persekutuan Doa Rayon 1 s/d 4 dilaksanakan serentak hari Rabu pkl 17.00 WITA',
-    'Pelayanan Baptisan Kudus anak-anak akan dilaksanakan pada Minggu pertama bulan depan',
-    'Pembersihan lingkungan Gedung Gereja Betel Fuimelang oleh Kaum Bapak dan Pemuda pada hari Sabtu pkl 07.00 WITA',
-    'Dukungan doa untuk anggota jemaat yang sedang sakit di RSUD Kalabahi dan di rumah',
-  ]);
+  const [bulletinItems, setBulletinItems] = useState<string[]>([]);
   const [newItemInput, setNewItemInput] = useState('');
   const [bulletinTone, setBulletinTone] = useState('Hangat dan Menghidupkan Persekutuan');
   const [wartaResult, setWartaResult] = useState('');
@@ -277,53 +283,72 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const handleNewsImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('File harus berupa gambar JPG, PNG, atau WEBP.');
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setErrorMsg('Ukuran foto maksimal 12 MB agar dapat diproses dengan aman.');
+      return;
+    }
+
     setCloudUploading(true);
+    setErrorMsg(null);
     const reader = new FileReader();
+    reader.onerror = () => {
+      setCloudUploading(false);
+      setErrorMsg('Foto tidak dapat dibaca dari perangkat.');
+    };
     reader.onload = (readerEvent) => {
       const img = new Image();
+      img.onerror = () => {
+        setCloudUploading(false);
+        setErrorMsg('Format gambar tidak valid atau file rusak.');
+      };
       img.onload = async () => {
-        const canvas = document.createElement('canvas');
-        const maxW = 800;
-        const maxH = 600;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxW || h > maxH) {
-          if (w > h) {
-            h = Math.round((h * maxW) / w);
-            w = maxW;
-          } else {
-            w = Math.round((w * maxH) / h);
-            h = maxH;
+        try {
+          const canvas = document.createElement('canvas');
+          const maxW = 800;
+          const maxH = 600;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxW || h > maxH) {
+            if (w > h) {
+              h = Math.round((h * maxW) / w);
+              w = maxW;
+            } else {
+              w = Math.round((w * maxH) / h);
+              h = maxH;
+            }
           }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Browser tidak dapat memproses gambar.');
           ctx.drawImage(img, 0, 0, w, h);
           const compressed = canvas.toDataURL('image/jpeg', 0.85);
           setNewsImageUrl(compressed);
 
-          // Direct Cloud Firestore write to 'activity_images' collection
-          try {
-            const record = await uploadActivityImageToCloud(compressed, {
-              title: newsTitle || (newsMode === 'agenda' ? 'Dokumentasi Agenda Kegiatan' : 'Dokumentasi Berita Kegiatan'),
-              category: newsCategory,
-              description: newsNotes,
-            });
-            setCloudSavedImageId(record.id);
-            setRecentCloudImages((prev) => [record, ...prev]);
-          } catch (cloudErr) {
-            console.warn('[Cloud] Warning uploading activity image:', cloudErr);
-          }
+          // Save immediately, with a device copy and pending retry when offline.
+          const record = await uploadActivityImageToCloud(compressed, {
+            title: newsTitle || (newsMode === 'agenda' ? 'Dokumentasi Agenda Kegiatan' : 'Dokumentasi Berita Kegiatan'),
+            category: newsCategory,
+            description: newsNotes,
+          });
+          setCloudSavedImageId(record.id);
+          setImageSyncPending(Boolean(record.pendingSync));
+          setRecentCloudImages((prev) => [record, ...prev.filter((item) => item.id !== record.id)]);
+        } catch (cloudErr: any) {
+          console.warn('[Cloud] Warning uploading activity image:', cloudErr);
+          setErrorMsg(cloudErr?.message || 'Foto tersimpan di formulir, tetapi galeri cloud belum dapat diperbarui.');
+        } finally {
+          setCloudUploading(false);
         }
-        setCloudUploading(false);
       };
-      if (readerEvent.target?.result) {
-        img.src = readerEvent.target.result as string;
-      }
+      if (readerEvent.target?.result) img.src = readerEvent.target.result as string;
     };
     reader.readAsDataURL(file);
+    e.currentTarget.value = '';
   };
 
   const handleSaveNewsToAnnouncements = async () => {
@@ -589,7 +614,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     try {
       const statsSummary = {
         totalMembers: members.length,
-        totalFamilies: stats?.totalFamilies || 0,
+        totalFamilies: stats?.totalFamily ?? stats?.totalFamilies ?? 0,
         activeMembers: members.filter((m) => m.status === 'Aktif').length,
         baptized: members.filter((m) => m.baptismStatus === 'Sudah').length,
         sidi: members.filter((m) => m.confirmationStatus === 'Sudah').length,
@@ -621,6 +646,9 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold mb-2 border border-amber-500/30">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Pusat Kecerdasan Rohani & Pastoral GMIT Betel Fuimelang</span>
+              <span className={`ml-1 px-1.5 py-0.5 rounded ${aiConfigured ? 'bg-emerald-500/20 text-emerald-200' : 'bg-amber-500/20 text-amber-200'}`}>
+                {aiConfigured === null ? 'Memeriksa AI…' : aiConfigured ? 'Gemini Online' : 'Draf Lokal / Offline Siap'}
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
               AI Rohani Kristen & Asisten Pelayanan Jemaat
@@ -1107,12 +1135,12 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                   />
                 </div>
 
-                {/* Upload Foto Kegiatan - Langsung Tersimpan di Cloud Firestore */}
+                {/* Upload Foto Kegiatan - Langsung Tersimpan di Cloud SYSJEGER */}
                 <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <ImageIcon className="w-4 h-4 text-emerald-400" />
-                      <span>Foto Kegiatan (Tersimpan di Cloud)</span>
+                      <span>Foto Kegiatan (Cloud + Offline)</span>
                     </span>
                     <div className="flex items-center gap-2">
                       {recentCloudImages.length > 0 && (
@@ -1130,6 +1158,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                           onClick={() => {
                             setNewsImageUrl('');
                             setCloudSavedImageId('');
+                            setImageSyncPending(false);
                           }}
                           className="text-[10px] text-red-400 hover:underline cursor-pointer"
                         >
@@ -1144,7 +1173,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                     <div className="p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/30 flex items-center justify-between text-[11px] text-emerald-300">
                       <span className="flex items-center gap-1.5 font-medium">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>🟢 Tersimpan Langsung di Cloud Firestore</span>
+                        <span>{imageSyncPending ? '🟡 Foto tersimpan di perangkat · akan disinkronkan saat online' : '🟢 Tersimpan Langsung di Cloud SYSJEGER'}</span>
                       </span>
                       <span className="font-mono text-[10px] text-slate-400 truncate max-w-[100px]">
                         ID: {cloudSavedImageId}
@@ -1165,6 +1194,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                             onClick={() => {
                               setNewsImageUrl(img.url);
                               setCloudSavedImageId(img.id);
+                              setImageSyncPending(Boolean(img.pendingSync));
                               setShowCloudGallery(false);
                             }}
                             className="aspect-square rounded-lg overflow-hidden border border-slate-700 hover:border-emerald-400 cursor-pointer relative group transition"
@@ -1212,8 +1242,8 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                     {loading
                       ? 'AI Sedang Menyusun Naskah...'
                       : newsMode === 'news'
-                      ? 'Hasilkan Berita dengan AI (Gemini)'
-                      : 'Hasilkan Agenda & Rundown dengan AI (Gemini)'}
+                      ? `Hasilkan Berita dengan ${aiConfigured ? 'AI Gemini' : 'AI / Draf Lokal'}`
+                      : `Hasilkan Agenda & Rundown dengan ${aiConfigured ? 'AI Gemini' : 'AI / Draf Lokal'}`}
                   </span>
                 </button>
               </div>
@@ -1245,7 +1275,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                       onClick={handleSaveNewsToAnnouncements}
                       disabled={loading || savedNewsToWarta}
                       className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                      title="Terbitkan ke Warta Publik dan Cloud Firestore"
+                      title="Terbitkan ke Warta Publik dan Cloud SYSJEGER"
                     >
                       {savedNewsToWarta ? <Check className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
                       <span>{savedNewsToWarta ? 'Telah Diterbitkan!' : 'Terbitkan ke Warta (Cloud)'}</span>
@@ -1257,7 +1287,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                         onClick={handleSaveAgendaToCalendar}
                         disabled={loading || savedAgendaToCalendar}
                         className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                        title="Simpan langsung ke Kalender Kegiatan dan Cloud Firestore"
+                        title="Simpan langsung ke Kalender Kegiatan dan Cloud SYSJEGER"
                       >
                         {savedAgendaToCalendar ? <CheckCheck className="w-3.5 h-3.5" /> : <CalendarPlus className="w-3.5 h-3.5" />}
                         <span>{savedAgendaToCalendar ? 'Terjadwal di Kalender!' : 'Simpan ke Kalender (Cloud)'}</span>
@@ -1308,7 +1338,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                       />
                       <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-[10px] font-bold text-emerald-300 border border-emerald-400/40 flex items-center gap-1.5 shadow-md">
                         <Cloud className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Dokumentasi Cloud Firestore</span>
+                        <span>{imageSyncPending ? 'Dokumentasi tersimpan di perangkat' : 'Dokumentasi Cloud SYSJEGER'}</span>
                       </div>
                       <div className="absolute bottom-0 inset-x-0 p-3.5 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between text-xs text-slate-200">
                         <span className="font-semibold text-emerald-300">{newsTitle}</span>
@@ -1523,7 +1553,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               {counselingResult && (
                 <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
                   <span>Berakar pada doktrin Alkitabiah & kasih pastoral GMIT.</span>
-                  <span className="text-amber-400 font-semibold">Gemini 3.8 Flash Rohani</span>
+                  <span className="text-amber-400 font-semibold">{aiConfigured ? 'Gemini AI Rohani' : 'Draf Lokal Rohani'}</span>
                 </div>
               )}
             </div>
@@ -2249,7 +2279,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               {sermonResult && (
                 <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
                   <span>Draf khotbah siap dikembangkan oleh Pendeta / Majelis Jemaat.</span>
-                  <span className="text-amber-400 font-semibold">Gemini 3.8 Flash Reformed</span>
+                  <span className="text-amber-400 font-semibold">{aiConfigured ? 'Gemini AI Reformed' : 'Draf Lokal Reformed'}</span>
                 </div>
               )}
             </div>
@@ -2324,7 +2354,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="Misal: Opa Yulius Banamtuan / Ibu Maria"
+                  placeholder="Nama jemaat atau keluarga"
                   className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -2426,7 +2456,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               {prayerResult && (
                 <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
                   <span>Dilengkapi naskah doa dan pesan ringkas WhatsApp.</span>
-                  <span className="text-emerald-400 font-semibold">Gemini 3.8 Flash Pastoral</span>
+                  <span className="text-emerald-400 font-semibold">{aiConfigured ? 'Gemini AI Pastoral' : 'Draf Lokal Pastoral'}</span>
                 </div>
               )}
             </div>
@@ -2583,7 +2613,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               {wartaResult && (
                 <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
                   <span>Warta tersusun rapi dengan salam pembuka, jadwal rayon, doa syafaat & salam berkat.</span>
-                  <span className="text-amber-400 font-semibold">Gemini 3.8 Flash Warta</span>
+                  <span className="text-amber-400 font-semibold">{aiConfigured ? 'Gemini AI Warta' : 'Draf Lokal Warta'}</span>
                 </div>
               )}
             </div>
