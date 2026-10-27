@@ -34,6 +34,7 @@ import {
   Cloud,
   CalendarPlus,
   CheckCheck,
+  Trash2,
 } from 'lucide-react';
 import type { Member, Rayon, ChurchEvent } from '../../types/index.ts';
 import {
@@ -52,6 +53,7 @@ import {
 import {
   uploadActivityImageToCloud,
   fetchActivityImagesFromCloud,
+  deleteActivityImageFromCloud,
   type CloudActivityImage,
 } from '../../services/cloud-sync.ts';
 
@@ -123,6 +125,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [cloudSavedImageId, setCloudSavedImageId] = useState('');
   const [imageSyncPending, setImageSyncPending] = useState(false);
   const [recentCloudImages, setRecentCloudImages] = useState<CloudActivityImage[]>([]);
+  const [deletingCloudImageId, setDeletingCloudImageId] = useState('');
   const [showCloudGallery, setShowCloudGallery] = useState(false);
 
   // Fetch recent activity images and retry pending uploads when internet returns.
@@ -140,6 +143,25 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       window.removeEventListener('online', refreshGallery);
     };
   }, []);
+
+  const handleDeleteCloudImage = async (image: CloudActivityImage) => {
+    if (!window.confirm(`Hapus permanen foto "${image.title}" dari galeri?`)) return;
+    setDeletingCloudImageId(image.id);
+    setErrorMsg(null);
+    try {
+      await deleteActivityImageFromCloud(image.id);
+      setRecentCloudImages((prev) => prev.filter((item) => item.id !== image.id));
+      if (cloudSavedImageId === image.id) {
+        setCloudSavedImageId('');
+        setNewsImageUrl('');
+        setImageSyncPending(false);
+      }
+    } catch (error: any) {
+      setErrorMsg(error?.message || 'Foto gagal dihapus.');
+    } finally {
+      setDeletingCloudImageId('');
+    }
+  };
 
   // Tab 1: AI Konseling & Bimbingan Iman Rohani
   const [counselingCategory, setCounselingCategory] = useState('pergumulan-hidup');
@@ -1200,7 +1222,20 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                             className="aspect-square rounded-lg overflow-hidden border border-slate-700 hover:border-emerald-400 cursor-pointer relative group transition"
                           >
                             <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[9px] text-white text-center p-1">
+                            <button
+                              type="button"
+                              aria-label={`Hapus foto ${img.title}`}
+                              title="Hapus foto dari galeri"
+                              disabled={deletingCloudImageId === img.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDeleteCloudImage(img);
+                              }}
+                              className="absolute top-1 right-1 z-10 p-1.5 rounded-lg bg-slate-950/85 text-rose-300 border border-rose-400/40 hover:bg-rose-950 disabled:opacity-50"
+                            >
+                              {deletingCloudImageId === img.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            </button>
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[9px] text-white text-center p-1 pointer-events-none">
                               Pilih
                             </div>
                           </div>

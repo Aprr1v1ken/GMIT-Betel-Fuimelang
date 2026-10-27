@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, FileText, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { X, Upload, CheckCircle2 } from 'lucide-react';
 import type { Member, Rayon, CategorialGroup } from '../types/index.ts';
 
 interface ImportModalProps {
@@ -24,15 +24,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleLoadSample = () => {
-    const sample = `fullName,gender,birthDate,birthPlace,address,rayonId,categorialGroupId,phone
-Yulius Doko,Laki-laki,1992-03-14,Fuimelang,Jl. Timor Raya RT 01,r1,c4,081239887711
-Marta Doko-Kolly,Perempuan,1995-08-22,Kalabahi,Jl. Timor Raya RT 01,r1,c3,081239887712
-Samuel Doko,Laki-laki,2018-11-05,Fuimelang,Jl. Timor Raya RT 01,r1,c1,`;
-    setCsvText(sample);
-    parseCSV(sample);
-  };
-
   const parseCSV = (text: string) => {
     const lines = text.trim().split('\n');
     if (lines.length < 2) {
@@ -47,17 +38,17 @@ Samuel Doko,Laki-laki,2018-11-05,Fuimelang,Jl. Timor Raya RT 01,r1,c1,`;
       if (cols.length >= 3 && cols[0]) {
         const item: any = {
           fullName: cols[0],
-          gender: cols[1] || 'Laki-laki',
-          birthDate: cols[2] || '1990-01-01',
-          birthPlace: cols[3] || 'Fuimelang',
-          address: cols[4] || 'Fuimelang',
-          rayonId: cols[5] || rayons[0]?.id || 'r1',
-          categorialGroupId: cols[6] || categorials[0]?.id || 'c1',
+          gender: cols[1] || '',
+          birthDate: cols[2] || '',
+          birthPlace: cols[3] || '',
+          address: cols[4] || '',
+          rayonId: cols[5] || '',
+          categorialGroupId: cols[6] || '',
           phone: cols[7] || '',
           familyRole: 'Anggota',
           maritalStatus: 'Belum Menikah',
           membershipStatus: 'Tetap',
-          baptismStatus: 'Sudah',
+          baptismStatus: 'Belum',
           confirmationStatus: 'Belum',
           marriageChurchStatus: 'Belum',
           status: 'Aktif',
@@ -107,16 +98,11 @@ Samuel Doko,Laki-laki,2018-11-05,Fuimelang,Jl. Timor Raya RT 01,r1,c1,`;
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-slate-300">
+          <div className="space-y-1 text-slate-300">
+            <p>
               Tempelkan data CSV berformat: <code className="text-amber-400 font-mono text-[11px]">fullName,gender,birthDate,birthPlace,address,rayonId,categorialGroupId,phone</code>
             </p>
-            <button
-              onClick={handleLoadSample}
-              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-semibold transition-colors shrink-0"
-            >
-              Muat Contoh CSV
-            </button>
+            <p className="text-[11px] text-slate-400">Nama, jenis kelamin, tanggal lahir (YYYY-MM-DD), dan ID rayon wajib diisi. Baris tidak lengkap akan ditolak tanpa mengarang data.</p>
           </div>
 
           <textarea
@@ -149,7 +135,7 @@ Samuel Doko,Laki-laki,2018-11-05,Fuimelang,Jl. Timor Raya RT 01,r1,c1,`;
                         <td className="p-2 font-semibold text-white">{d.fullName}</td>
                         <td className="p-2">{d.gender}</td>
                         <td className="p-2 font-mono">{d.birthDate}</td>
-                        <td className="p-2">{d.rayonId}</td>
+                        <td className="p-2">{rayons.find((r) => r.id === d.rayonId)?.name || d.rayonId}</td>
                         <td className="p-2 font-mono">{d.phone || '-'}</td>
                       </tr>
                     ))}

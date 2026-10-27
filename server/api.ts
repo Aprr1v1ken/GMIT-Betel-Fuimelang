@@ -34,6 +34,7 @@ apiRouter.use(async (req, res, next) => {
     await preparePersistence();
   } catch (error: any) {
     console.error('[Persistence] Database cloud tidak siap:', error?.message || error);
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(503).json({ success: false, message: 'Penyimpanan cloud sementara tidak dapat dihubungi. Coba beberapa saat lagi.' });
   }
 
@@ -65,7 +66,7 @@ apiRouter.use((req, res, next) => {
   const path = req.path.replace(/\/$/, '') || '/';
   const publicWebAuthn = path === '/auth/webauthn/authentication-options' || path === '/auth/webauthn/authenticate';
   if (req.method === 'OPTIONS' || path === '/auth/login' || path === '/auth/google' || publicWebAuthn) return next();
-  if (path.startsWith('/ai/')) return next();
+  if (req.method === 'GET' && path === '/ai/status') return next();
   if (req.method === 'GET' && PUBLIC_READ_PATHS.has(path)) return next();
 
   const user = getRequestUser(req);
@@ -241,9 +242,9 @@ apiRouter.get('/members', (req, res) => {
     birthPlace: r.birth_place || '',
     birthDate: r.birth_date,
     address: r.address,
-    kelurahan: r.kelurahan || 'Lembur Tengah',
-    kecamatan: r.kecamatan || 'Alor Tengah Utara',
-    kabupaten: r.kabupaten || 'Alor',
+    kelurahan: r.kelurahan || '',
+    kecamatan: r.kecamatan || '',
+    kabupaten: r.kabupaten || '',
     phone: r.phone || '',
     email: r.email || '',
     maritalStatus: r.marital_status,
@@ -318,9 +319,9 @@ apiRouter.post('/members', (req, res) => {
     `).run(
       id, memberNo, data.fullName, data.nickname || '', data.nik || '', data.familyCardNo || '',
       data.familyId || '', data.familyRole || 'Anggota', data.gender, data.birthPlace || '',
-      data.birthDate, data.address || '', data.kelurahan || 'Lembur Tengah', data.kecamatan || 'Alor Tengah Utara',
-      data.kabupaten || 'Alor', data.phone || '', data.email || '', data.maritalStatus || 'Belum Menikah',
-      data.spouseName || '', data.rayonId, data.categorialGroupId || 'c1', data.membershipStatus || 'Tetap',
+      data.birthDate, data.address || '', data.kelurahan || '', data.kecamatan || '',
+      data.kabupaten || '', data.phone || '', data.email || '', data.maritalStatus || 'Belum Menikah',
+      data.spouseName || '', data.rayonId, data.categorialGroupId || '', data.membershipStatus || 'Tetap',
       data.baptismStatus || 'Belum', data.baptismDate || '', data.confirmationStatus || 'Belum',
       data.confirmationDate || '', data.marriageChurchStatus || 'Belum', data.marriageDate || '',
       data.education || '', data.occupation || '', data.joinDate || now, data.status || 'Aktif',
@@ -343,16 +344,16 @@ apiRouter.post('/members', (req, res) => {
       birthPlace: data.birthPlace || '',
       birthDate: data.birthDate,
       address: data.address || '',
-      kelurahan: data.kelurahan || 'Lembur Tengah',
-      kecamatan: data.kecamatan || 'Alor Tengah Utara',
-      kabupaten: data.kabupaten || 'Alor',
+      kelurahan: data.kelurahan || '',
+      kecamatan: data.kecamatan || '',
+      kabupaten: data.kabupaten || '',
       phone: data.phone || '',
       email: data.email || '',
       maritalStatus: data.maritalStatus || 'Belum Menikah',
       spouseName: data.spouseName || '',
       rayonId: data.rayonId,
       rayonName: '',
-      categorialGroupId: data.categorialGroupId || 'c1',
+      categorialGroupId: data.categorialGroupId || '',
       categorialGroupName: '',
       membershipStatus: data.membershipStatus || 'Tetap',
       baptismStatus: data.baptismStatus || 'Belum',
@@ -398,9 +399,9 @@ apiRouter.put('/members/:id', (req, res) => {
   const birthPlace = data.birthPlace !== undefined ? data.birthPlace : (existing.birth_place || '');
   const birthDate = data.birthDate !== undefined ? data.birthDate : existing.birth_date;
   const address = data.address !== undefined ? data.address : (existing.address || '');
-  const kelurahan = data.kelurahan !== undefined ? data.kelurahan : (existing.kelurahan || 'Lembur Tengah');
-  const kecamatan = data.kecamatan !== undefined ? data.kecamatan : (existing.kecamatan || 'Alor Tengah Utara');
-  const kabupaten = data.kabupaten !== undefined ? data.kabupaten : (existing.kabupaten || 'Alor');
+  const kelurahan = data.kelurahan !== undefined ? data.kelurahan : (existing.kelurahan || '');
+  const kecamatan = data.kecamatan !== undefined ? data.kecamatan : (existing.kecamatan || '');
+  const kabupaten = data.kabupaten !== undefined ? data.kabupaten : (existing.kabupaten || '');
   const phone = data.phone !== undefined ? data.phone : (existing.phone || '');
   const email = data.email !== undefined ? data.email : (existing.email || '');
   const maritalStatus = data.maritalStatus !== undefined ? data.maritalStatus : existing.marital_status;
@@ -1420,6 +1421,7 @@ apiRouter.put('/corrections/:id', (req, res) => {
 
 // 14. Dashboard Statistics
 apiRouter.get('/health', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, service: 'sysjeger-api', storage: persistenceMode(), timestamp: new Date().toISOString() });
 });
 
@@ -1563,10 +1565,10 @@ apiRouter.post('/import/members', (req, res) => {
       insertMember.run(
         id, memberNo, item.fullName, item.nickname || '', item.nik || '', item.familyCardNo || '',
         item.familyId || '', item.familyRole || 'Anggota', item.gender, item.birthPlace || '',
-        item.birthDate, item.address || 'Desa Lembur Tengah', item.kelurahan || 'Lembur Tengah',
-        item.kecamatan || 'Alor Tengah Utara', item.kabupaten || 'Alor', item.phone || '', item.email || '',
-        item.maritalStatus || 'Belum Menikah', item.spouseName || '', item.rayonId || 'r1',
-        item.categorialGroupId || 'c1', item.membershipStatus || 'Tetap',
+        item.birthDate, item.address || '', item.kelurahan || '',
+        item.kecamatan || '', item.kabupaten || '', item.phone || '', item.email || '',
+        item.maritalStatus || 'Belum Menikah', item.spouseName || '', item.rayonId,
+        item.categorialGroupId || '', item.membershipStatus || 'Tetap',
         item.baptismStatus || 'Belum', item.baptismDate || '', item.confirmationStatus || 'Belum',
         item.confirmationDate || '', item.marriageChurchStatus || 'Belum', item.marriageDate || '',
         item.education || '', item.occupation || '', item.joinDate || now, item.status || 'Aktif',

@@ -10,7 +10,7 @@ import {
   type Family,
 } from '../types/index.ts';
 
-import { uploadMemberPhotoToFirebase } from '../services/storage.ts';
+import { uploadMemberPhoto } from '../services/storage.ts';
 
 interface MemberFormModalProps {
   isOpen: boolean;
@@ -132,9 +132,9 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     setUploadingPhoto(true);
     setError('');
     try {
-      const res = await uploadMemberPhotoToFirebase(file, formData.fullName || member?.memberNo || 'member');
+      const res = await uploadMemberPhoto(file, formData.fullName || member?.memberNo || 'member');
       handleChange('photoUrl', res.url);
-      setPhotoSource(res.source === 'firebase_storage' ? 'Firebase Storage' : 'Cloud Storage');
+      setPhotoSource(res.source === 'device_queue' ? 'Perangkat — menunggu sinkronisasi' : res.source === 'cloud_server' ? 'Database Cloud' : 'Foto pada Data Jemaat');
     } catch (uploadErr: any) {
       console.warn('Gagal upload foto:', uploadErr);
       setError(uploadErr.message || 'Gagal mengunggah foto jemaat');

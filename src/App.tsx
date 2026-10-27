@@ -15,7 +15,6 @@ import { SacramentModal } from './components/SacramentModal.tsx';
 import { ImportModal } from './components/ImportModal.tsx';
 import { PrintReportModal } from './components/PrintReportModal.tsx';
 import { KoboExportModal } from './components/KoboExportModal.tsx';
-import { WartaPdfModal } from './components/WartaPdfModal.tsx';
 import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 
 // Views
@@ -38,13 +37,14 @@ import { ReportsView } from './components/views/ReportsView.tsx';
 import { SettingsView } from './components/views/SettingsView.tsx';
 
 import * as api from './services/api.ts';
-import * as cloudSync from './services/cloud-sync.ts';
+import { syncPendingActivityImages } from './services/cloud-sync.ts';
 import * as adminApi from './services/admin-api.ts';
 
 // Heavy, less frequently used modules are loaded on demand for faster mobile startup.
 const AIAssistantView = React.lazy(() => import('./components/views/AIAssistantView.tsx').then((module) => ({ default: module.AIAssistantView })));
 const GoogleMapsView = React.lazy(() => import('./components/views/GoogleMapsView.tsx').then((module) => ({ default: module.GoogleMapsView })));
 const GoogleWorkspaceView = React.lazy(() => import('./components/views/GoogleWorkspaceView.tsx').then((module) => ({ default: module.GoogleWorkspaceView })));
+const WartaPdfModal = React.lazy(() => import('./components/WartaPdfModal.tsx').then((module) => ({ default: module.WartaPdfModal })));
 import {
   getOfflineMembersQueue,
   addMemberToOfflineQueue,
@@ -156,7 +156,10 @@ export default function App() {
 
   // Load all data from API with Auto-Sync & Promise.allSettled Resilience
   const loadAllData = async () => {
-    // Retry pending member photos as well as queued member records.
+    // Retry pending activity images, member photos, and queued member records.
+    if (currentUser && navigator.onLine) {
+      await syncPendingActivityImages();
+    }
     if (currentUser && Object.keys(getOfflineMemberPhotos()).length > 0 && navigator.onLine) {
       await syncOfflineMemberPhotos(api.updateMemberPhotoApi);
     }
@@ -239,7 +242,7 @@ export default function App() {
       const offlineItems: Member[] = remainingOffline.map((item) => ({
         id: item.id || `offline-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         memberNo: item.memberNo || 'OFFLINE-TEMP',
-        fullName: item.fullName || 'Jemaat Baru (Offline)',
+        fullName: item.fullName || '',
         nickname: item.nickname || '',
         nik: item.nik || '',
         familyCardNo: item.familyCardNo || '',
@@ -247,22 +250,22 @@ export default function App() {
         familyName: item.familyName || '',
         familyRole: item.familyRole || 'Anak',
         gender: item.gender || 'Laki-laki',
-        birthPlace: item.birthPlace || 'Fuimelang',
-        birthDate: item.birthDate || '1995-01-01',
-        address: item.address || 'Desa Lembur Tengah',
-        kelurahan: item.kelurahan || 'Lembur Tengah',
-        kecamatan: item.kecamatan || 'Alor Tengah Utara',
-        kabupaten: item.kabupaten || 'Alor',
+        birthPlace: item.birthPlace || '',
+        birthDate: item.birthDate || '',
+        address: item.address || '',
+        kelurahan: item.kelurahan || '',
+        kecamatan: item.kecamatan || '',
+        kabupaten: item.kabupaten || '',
         phone: item.phone || '',
         email: item.email || '',
         maritalStatus: item.maritalStatus || 'Belum Menikah',
         spouseName: item.spouseName || '',
-        rayonId: item.rayonId || 'r1',
-        rayonName: item.rayonName || 'Rayon Pelayanan',
-        categorialGroupId: item.categorialGroupId || 'c1',
-        categorialGroupName: item.categorialGroupName || 'Kategorial',
+        rayonId: item.rayonId || '',
+        rayonName: item.rayonName || '',
+        categorialGroupId: item.categorialGroupId || '',
+        categorialGroupName: item.categorialGroupName || '',
         membershipStatus: item.membershipStatus || 'Tetap',
-        baptismStatus: item.baptismStatus || 'Sudah',
+        baptismStatus: item.baptismStatus || 'Belum',
         baptismDate: item.baptismDate || '',
         confirmationStatus: item.confirmationStatus || 'Belum',
         confirmationDate: item.confirmationDate || '',
@@ -357,65 +360,6 @@ export default function App() {
         auditLogs: auditRes?.logs || offlineSnapshot.auditLogs || [],
       });
 
-      // Real-Time Cloud Firestore Sync (Ensures Vercel & GitHub persistence across instances)
-      try {
-        const [cloudStaff, cloudSchedules, cloudAnnouncements, cloudMembers, cloudEvents] = await Promise.all([
-          currentUser && !isJemaat ? cloudSync.fetchStaffFromFirestore() : Promise.resolve([]),
-          cloudSync.fetchSchedulesFromFirestore(),
-          cloudSync.fetchAnnouncementsFromFirestore(),
-          currentUser && !isJemaat ? cloudSync.fetchMembersFromFirestore() : Promise.resolve([]),
-          cloudSync.fetchEventsFromFirestore(),
-        ]);
-
-        if (cloudStaff && cloudStaff.length > 0) {
-          setStaff((prev) => {
-            const map = new Map<string, ChurchStaff>();
-            (staffRes?.staff || prev || []).forEach((s: ChurchStaff) => map.set(s.id, s));
-            cloudStaff.forEach((s: ChurchStaff) => map.set(s.id, s));
-            return Array.from(map.values());
-          });
-        }
-
-        if (cloudSchedules && cloudSchedules.length > 0) {
-          setSchedules((prev) => {
-            const map = new Map<string, ServiceSchedule>();
-            (schedulesRes?.schedules || prev || []).forEach((s: ServiceSchedule) => map.set(s.id, s));
-            cloudSchedules.forEach((s: ServiceSchedule) => map.set(s.id, s));
-            return Array.from(map.values());
-          });
-        }
-
-        if (cloudAnnouncements && cloudAnnouncements.length > 0) {
-          setAnnouncements((prev) => {
-            const map = new Map<string, Announcement>();
-            (announcementsRes?.announcements || prev || []).forEach((a: Announcement) => map.set(a.id, a));
-            cloudAnnouncements.forEach((a: Announcement) => map.set(a.id, a));
-            return Array.from(map.values());
-          });
-        }
-
-        if (cloudMembers && cloudMembers.length > 0) {
-          setMembers((prev) => {
-            const map = new Map<string, Member>();
-            prev.forEach((m) => map.set(m.id, m));
-            cloudMembers.forEach((m) => map.set(m.id, m));
-            const merged = Array.from(map.values());
-            cacheMembersLocally(merged);
-            return merged;
-          });
-        }
-
-        if (cloudEvents && cloudEvents.length > 0) {
-          setEvents((prev) => {
-            const map = new Map<string, ChurchEvent>();
-            (eventsRes?.events || prev || []).forEach((e: ChurchEvent) => map.set(e.id, e));
-            cloudEvents.forEach((e: ChurchEvent) => map.set(e.id, e));
-            return Array.from(map.values());
-          });
-        }
-      } catch (cloudErr) {
-        console.warn('Firestore cloud sync optional merge:', cloudErr);
-      }
     } catch (err) {
       console.warn('Jaringan offline atau server tidak merespons, memuat dari penyimpanan lokal browser:', err);
       const cached = getCachedMembersLocally();
@@ -500,6 +444,9 @@ export default function App() {
   useEffect(() => {
     const handleOnlineEvent = () => {
       setIsOnline(true);
+      // Activity photos have their own idempotent retry queue and must sync
+      // even when there are no pending member records.
+      void syncPendingActivityImages();
       setSyncToast({
         message: 'Koneksi internet terhubung kembali! Memulai sinkronisasi data offline...',
         type: 'success',
@@ -605,11 +552,10 @@ export default function App() {
 
   const handleDeleteMember = async (id: string) => {
     await api.deleteMemberApi(id);
-    await cloudSync.deleteMemberFromFirestore(id);
     await loadAllData();
   };
 
-  // Direct Photo Update Handler for KAJ Cards (Linked to Firebase Storage & Database)
+  // Direct Photo Update Handler for KAJ Cards (API database + offline retry)
   const handleUpdateMemberPhoto = async (memberId: string, photoUrl: string) => {
     // Update the printable local record first. If the network drops, the photo
     // remains usable and is retried instead of disappearing when the modal closes.
@@ -626,11 +572,6 @@ export default function App() {
       const result = await api.updateMemberPhotoApi(memberId, photoUrl);
       if (result?.success === false) throw new Error(result.message || 'Server menolak foto');
       removeOfflineMemberPhoto(memberId);
-      await cloudSync.syncMemberToFirestore({
-        id: memberId,
-        photoUrl,
-        updatedAt: new Date().toISOString(),
-      });
       setSyncToast({
         message: 'Foto anggota jemaat berhasil diperbarui dan tersimpan di database serta kartu jemaat.',
         type: 'success',
@@ -698,46 +639,24 @@ export default function App() {
     await loadAllData();
   };
 
-  // Church Staff (Majelis & Pendeta & Pengajar) CRUD handlers with Firestore sync
+  // Church Staff (Majelis, Pendeta, dan Pengajar) CRUD through the API database.
   const handleAddStaff = async (data: Partial<ChurchStaff>) => {
-    const res = await api.createStaffApi(data);
-    const newStaff: ChurchStaff = {
-      id: res.id || 'st-' + Date.now(),
-      name: data.name || '',
-      position: data.position || 'Penatua Rayon',
-      period: data.period || '2026 - 2029',
-      phone: data.phone || '',
-      email: data.email || '',
-      status: (data.status as any) || 'Aktif',
-    };
-    await cloudSync.syncStaffToFirestore(newStaff);
+    await api.createStaffApi(data);
     await loadAllData();
   };
 
   const handleUpdateStaff = async (id: string, data: Partial<ChurchStaff>) => {
     await api.updateStaffApi(id, data);
-    const existing = staff.find((s) => s.id === id);
-    if (existing) {
-      await cloudSync.syncStaffToFirestore({
-        ...existing,
-        ...data,
-        id,
-      });
-    }
     await loadAllData();
   };
 
   const handleDeleteStaff = async (id: string) => {
     await api.deleteStaffApi(id);
-    await cloudSync.deleteStaffFromFirestore(id);
     await loadAllData();
   };
 
   const handleClearAllStaff = async () => {
     await api.clearAllStaffApi();
-    for (const s of staff) {
-      await cloudSync.deleteStaffFromFirestore(s.id);
-    }
     await loadAllData();
   };
 
@@ -808,83 +727,39 @@ export default function App() {
     await loadAllData();
   };
 
-  // Event & Schedule handlers with Firestore sync
+  // Event and service schedule handlers use the same durable API database.
   const handleAddEvent = async (data: Partial<ChurchEvent>) => {
-    const res = await api.createEventApi(data);
-    const newEvent: ChurchEvent = {
-      id: res?.id || 'evt-' + Date.now(),
-      title: data.title || '',
-      category: data.category || 'Lainnya',
-      startTime: data.startTime || '',
-      endTime: data.endTime || '',
-      location: data.location || '',
-      picName: data.picName || '',
-      description: data.description || '',
-      status: data.status || 'Terjadwal',
-      imageUrl: data.imageUrl || '',
-    };
-    await cloudSync.syncEventToFirestore(newEvent);
+    await api.createEventApi(data);
     await loadAllData();
   };
 
   const handleUpdateEvent = async (id: string, data: Partial<ChurchEvent>) => {
     await api.updateEventApi(id, data);
-    const existing = events.find((event) => event.id === id);
-    if (existing) await cloudSync.syncEventToFirestore({ ...existing, ...data, id });
     await loadAllData();
   };
 
   const handleDeleteEvent = async (id: string) => {
     await api.deleteEventApi(id);
-    await cloudSync.deleteEventFromFirestore(id);
     await loadAllData();
   };
 
   const handleAddSchedule = async (data: Partial<ServiceSchedule>) => {
-    const res = await api.createScheduleApi(data);
-    const newSchedule: ServiceSchedule = {
-      id: res.id || 'sch-' + Date.now(),
-      serviceDate: data.serviceDate || '',
-      serviceName: data.serviceName || '',
-      preacher: data.preacher || '',
-      liturgist: data.liturgist || '',
-      elderDuty: data.elderDuty || '',
-      deaconDuty: data.deaconDuty || '',
-      songLeader: data.songLeader || '',
-      musicians: data.musicians || '',
-      multimediaOperator: data.multimediaOperator || '',
-      usher: data.usher || '',
-      bibleReader: data.bibleReader || '',
-      notes: data.notes || '',
-    };
-    await cloudSync.syncScheduleToFirestore(newSchedule);
+    await api.createScheduleApi(data);
     await loadAllData();
   };
 
   const handleUpdateSchedule = async (id: string, data: Partial<ServiceSchedule>) => {
     await api.updateScheduleApi(id, data);
-    const existing = schedules.find((s) => s.id === id);
-    if (existing) {
-      await cloudSync.syncScheduleToFirestore({
-        ...existing,
-        ...data,
-        id,
-      });
-    }
     await loadAllData();
   };
 
   const handleDeleteSchedule = async (id: string) => {
     await api.deleteScheduleApi(id);
-    await cloudSync.deleteScheduleFromFirestore(id);
     await loadAllData();
   };
 
   const handleClearAllSchedules = async () => {
     await api.clearAllSchedulesApi();
-    for (const sch of schedules) {
-      await cloudSync.deleteScheduleFromFirestore(sch.id);
-    }
     await loadAllData();
   };
 
@@ -936,39 +811,19 @@ export default function App() {
     await loadAllData();
   };
 
-  // Announcement (Warta Jemaat) handlers with Firestore sync
+  // Announcement (Warta Jemaat) handlers use the API database only.
   const handleAddAnnouncement = async (data: Partial<Announcement>) => {
-    const res = await api.createAnnouncementApi(data);
-    const newAn: Announcement = {
-      id: res.id || 'an-' + Date.now(),
-      title: data.title || '',
-      date: data.date || new Date().toISOString().substring(0, 10),
-      category: data.category || 'Warta Ibadah',
-      content: data.content || '',
-      author: data.author || 'Sekretariat Majelis',
-      isImportant: data.isImportant || false,
-      imageUrl: data.imageUrl || '',
-    };
-    await cloudSync.syncAnnouncementToFirestore(newAn);
+    await api.createAnnouncementApi(data);
     await loadAllData();
   };
 
   const handleUpdateAnnouncement = async (id: string, data: Partial<Announcement>) => {
     await api.updateAnnouncementApi(id, data);
-    const existing = announcements.find((a) => a.id === id);
-    if (existing) {
-      await cloudSync.syncAnnouncementToFirestore({
-        ...existing,
-        ...data,
-        id,
-      });
-    }
     await loadAllData();
   };
 
   const handleDeleteAnnouncement = async (id: string) => {
     await api.deleteAnnouncementApi(id);
-    await cloudSync.deleteAnnouncementFromFirestore(id);
     await loadAllData();
   };
 
@@ -1500,13 +1355,17 @@ export default function App() {
         rayons={rayons}
       />
 
-      <WartaPdfModal
-        isOpen={showWartaPdfModal}
-        onClose={() => setShowWartaPdfModal(false)}
-        transactions={transactions}
-        members={members}
-        rayons={rayons}
-      />
+      {showWartaPdfModal && (
+        <React.Suspense fallback={<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 text-sm text-cyan-200">Menyiapkan editor warta…</div>}>
+          <WartaPdfModal
+            isOpen
+            onClose={() => setShowWartaPdfModal(false)}
+            transactions={transactions}
+            members={members}
+            rayons={rayons}
+          />
+        </React.Suspense>
+      )}
 
       {/* Floating Offline & Sync Notification Toast */}
       {syncToast && (

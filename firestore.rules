@@ -47,9 +47,10 @@ service cloud.firestore {
     }
     match /activity_images/{imageId} {
       allow read: if true;
-      allow write: if isAdmin() && validId(imageId)
+      allow create, update: if isAdmin() && validId(imageId)
         && request.resource.data.url is string
         && request.resource.data.url.size() <= 1500000;
+      allow delete: if isAdmin() && validId(imageId);
     }
 
     // Membership, contact, family, staff, and financial records are private.
