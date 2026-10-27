@@ -8,12 +8,15 @@ import { getDb } from './db.ts';
 const TABLES = [
   'users', 'webauthn_credentials', 'rayons', 'categorial_groups', 'families', 'members', 'church_staff',
   'baptisms', 'confirmations', 'marriages', 'member_mutations', 'events',
-  'service_schedules', 'attendance_records', 'financial_transactions', 'documents',
+  'service_schedules', 'attendance_records', 'financial_transactions', 'church_settings', 'documents',
   'announcements', 'activity_images', 'data_correction_requests', 'audit_logs',
 ] as const;
 
 type TableName = typeof TABLES[number];
 type Snapshot = { version: 1; savedAt: string; tables: Record<TableName, any[]> };
+// Newly introduced tables may be absent from an older durable snapshot. Their
+// clean schema/default rows are retained while all pre-existing tables restore.
+const DEFAULTED_SNAPSHOT_TABLES = new Set<TableName>(['church_settings']);
 
 let pool: Pool | null = null;
 let preparePromise: Promise<void> | null = null;
@@ -66,7 +69,11 @@ function readSnapshot(): Snapshot {
 }
 
 function validSnapshot(value: any): value is Snapshot {
-  return value && value.version === 1 && value.tables && TABLES.every((table) => Array.isArray(value.tables[table]));
+  return value && value.version === 1 && value.tables && TABLES.every((table) =>
+    DEFAULTED_SNAPSHOT_TABLES.has(table)
+      ? value.tables[table] === undefined || Array.isArray(value.tables[table])
+      : Array.isArray(value.tables[table])
+  );
 }
 
 function restoreSnapshot(snapshot: Snapshot) {
@@ -75,9 +82,13 @@ function restoreSnapshot(snapshot: Snapshot) {
   try {
     // There are no foreign-key constraints in the legacy schema; deleting in
     // reverse order also keeps this safe if constraints are added later.
-    for (const table of [...TABLES].reverse()) db.prepare(`DELETE FROM ${table}`).run();
+    for (const table of [...TABLES].reverse()) {
+      if (DEFAULTED_SNAPSHOT_TABLES.has(table) && !Array.isArray(snapshot.tables[table])) continue;
+      db.prepare(`DELETE FROM ${table}`).run();
+    }
     for (const table of TABLES) {
       const rows = snapshot.tables[table];
+      if (DEFAULTED_SNAPSHOT_TABLES.has(table) && !Array.isArray(rows)) continue;
       for (const row of rows) {
         const columns = Object.keys(row);
         if (columns.length === 0) continue;

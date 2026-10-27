@@ -91,6 +91,8 @@ export interface Rayon {
   familyCount: number;
   memberCount: number;
   notes?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface CategorialGroup {
@@ -272,6 +274,26 @@ export interface DocumentRecord {
   fileSize: string;
   uploadDate: string;
   accessLevel: 'Publik' | 'Majelis' | 'Admin';
+  mimeType?: string;
+  hasFile?: boolean;
+  /** Sent only during upload or by the authorized single-file download endpoint. */
+  fileData?: string;
+}
+
+export interface ChurchSettings {
+  id: string;
+  churchName: string;
+  klasis: string;
+  address: string;
+  phone: string;
+  email: string;
+  logoUrl: string;
+  stampUrl: string;
+  signerName: string;
+  signerRole: string;
+  secretaryName?: string;
+  secretaryRole?: string;
+  updatedAt?: string;
 }
 
 export interface Announcement {

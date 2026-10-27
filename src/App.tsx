@@ -77,7 +77,9 @@ import type {
   DataCorrectionRequest,
   AuditLog,
   User,
+  ChurchSettings,
 } from './types/index.ts';
+import { DEFAULT_CHURCH_SETTINGS } from './utils/church-settings.ts';
 
 export default function App() {
   // User authentication session: if none stored in localStorage, start as null (guest/public)
@@ -139,6 +141,7 @@ export default function App() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [corrections, setCorrections] = useState<DataCorrectionRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [churchSettings, setChurchSettings] = useState<ChurchSettings>(DEFAULT_CHURCH_SETTINGS);
   const [stats, setStats] = useState<any>(null);
 
   // Offline Synchronization & Network Awareness
@@ -211,6 +214,7 @@ export default function App() {
         api.fetchAnnouncementsApi(),
         privateRequest(api.fetchCorrectionsApi, true),
         privateRequest(api.fetchAuditLogsApi),
+        privateRequest(api.fetchChurchSettingsApi),
       ]);
 
       const val = (idx: number) => results[idx].status === 'fulfilled' ? (results[idx] as PromiseFulfilledResult<any>).value : null;
@@ -231,6 +235,7 @@ export default function App() {
       const announcementsRes = val(13);
       const correctionsRes = val(14);
       const auditRes = val(15);
+      const settingsRes = val(16);
 
       if (statsRes?.stats) setStats(statsRes.stats);
       else if (offlineSnapshot.stats) setStats(offlineSnapshot.stats);
@@ -336,6 +341,9 @@ export default function App() {
       else if (offlineSnapshot.corrections) setCorrections(offlineSnapshot.corrections);
       if (auditRes?.logs) setAuditLogs(auditRes.logs);
       else if (offlineSnapshot.auditLogs) setAuditLogs(offlineSnapshot.auditLogs);
+      if (settingsRes?.settings) setChurchSettings(settingsRes.settings);
+      else if (offlineSnapshot.churchSettings) setChurchSettings(offlineSnapshot.churchSettings);
+      else if (!currentUser) setChurchSettings(DEFAULT_CHURCH_SETTINGS);
 
       // Keep a device snapshot for offline reading. Server responses remain the
       // source of truth whenever the connection is available.
@@ -358,6 +366,7 @@ export default function App() {
         announcements: announcementsRes?.announcements || offlineSnapshot.announcements || [],
         corrections: correctionsRes?.corrections || offlineSnapshot.corrections || [],
         auditLogs: auditRes?.logs || offlineSnapshot.auditLogs || [],
+        churchSettings: settingsRes?.settings || offlineSnapshot.churchSettings || churchSettings,
       });
 
     } catch (err) {
@@ -811,6 +820,13 @@ export default function App() {
     await loadAllData();
   };
 
+  const handleSaveChurchSettings = async (data: ChurchSettings) => {
+    if (currentUser?.role !== 'Super Admin') throw new Error('Hanya Super Admin yang dapat mengubah kop resmi.');
+    const response = await api.updateChurchSettingsApi(data);
+    if (response?.settings) setChurchSettings(response.settings);
+    await loadAllData();
+  };
+
   // Announcement (Warta Jemaat) handlers use the API database only.
   const handleAddAnnouncement = async (data: Partial<Announcement>) => {
     await api.createAnnouncementApi(data);
@@ -1197,6 +1213,7 @@ export default function App() {
           {currentView === 'documents' && (
             <DocumentsView
               documents={documents}
+              members={members}
               onAddDocument={handleAddDocument}
               onUpdateDocument={handleUpdateDocument}
               onDeleteDocument={handleDeleteDocument}
@@ -1259,6 +1276,10 @@ export default function App() {
               onPurgeSampleData={handlePurgeAllSampleData}
               isSuperAdmin={currentUser?.role === 'Super Admin'}
               currentUser={currentUser}
+              members={members}
+              rayons={rayons}
+              churchSettings={churchSettings}
+              onSaveChurchSettings={handleSaveChurchSettings}
             />
           )}
 
@@ -1346,6 +1367,7 @@ export default function App() {
         families={families}
         rayons={rayons}
         transactions={transactions}
+        churchSettings={churchSettings}
       />
 
       <KoboExportModal
@@ -1363,6 +1385,7 @@ export default function App() {
             transactions={transactions}
             members={members}
             rayons={rayons}
+            churchSettings={churchSettings}
           />
         </React.Suspense>
       )}

@@ -370,6 +370,25 @@ export async function createDocumentApi(data: Partial<DocumentRecord>) {
   return res.json();
 }
 
+export async function downloadDocumentApi(id: string) {
+  const res = await apiFetch(`${API_BASE}/documents/${encodeURIComponent(id)}/file`);
+  return res.json();
+}
+
+export async function fetchChurchSettingsApi() {
+  const res = await apiFetch(`${API_BASE}/settings/church`);
+  return res.json();
+}
+
+export async function updateChurchSettingsApi(data: Partial<import('../types/index.ts').ChurchSettings>) {
+  const res = await apiFetch(`${API_BASE}/settings/church`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
 export async function fetchAnnouncementsApi() {
   const res = await apiFetch(`${API_BASE}/announcements`);
   return res.json();

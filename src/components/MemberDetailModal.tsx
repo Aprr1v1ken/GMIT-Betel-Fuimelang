@@ -17,6 +17,7 @@ import {
   Trash2,
   Cloud,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 import { calculateAge, formatDateDMY } from '../utils/church-logic.ts';
 import type { Member, CardColorThemeId } from '../types/index.ts';
@@ -154,11 +155,13 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
   onUpdatePhoto,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const downloadCardRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [activeThemeId, setActiveThemeId] = useState<CardColorThemeId>('gold');
   const [printMode, setPrintMode] = useState<'card-only' | 'full'>('card-only');
   const [currentPhoto, setCurrentPhoto] = useState<string | undefined>(member?.photoUrl);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+  const [downloadingCard, setDownloadingCard] = useState<boolean>(false);
   const [uploadSource, setUploadSource] = useState<string>('');
   const [uploadToast, setUploadToast] = useState<string | null>(null);
 
@@ -232,6 +235,46 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
 
   const currentTheme = getResolvedTheme();
 
+  const handleDownloadCard = async () => {
+    if (!downloadCardRef.current) return;
+    setDownloadingCard(true);
+    setUploadToast(null);
+    try {
+      const element = downloadCardRef.current;
+      await Promise.all(Array.from(element.querySelectorAll('img')).map((image) => {
+        if (image.complete) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
+        });
+      }));
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(element, {
+        scale: 4,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#0c1630',
+        windowWidth: 1200,
+      });
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((result) => result ? resolve(result) : reject(new Error('Kartu tidak dapat dirender.')), 'image/png');
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Kartu-KTP-${member.fullName.replace(/[^A-Za-z0-9]+/g, '-')}.png`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setUploadToast('✅ Kartu ID-1 berhasil diunduh sebagai PNG. Foto dan tema yang dipilih sudah disertakan.');
+    } catch (error: any) {
+      setUploadToast(`❌ ${error?.message || 'Kartu gagal diunduh. Coba gunakan tombol Cetak Kartu.'}`);
+    } finally {
+      setDownloadingCard(false);
+    }
+  };
+
   const handlePrintCardOnly = () => {
     setPrintMode('card-only');
     setTimeout(() => {
@@ -248,9 +291,27 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm print:p-0 print:bg-white print:static print:block">
+      {printMode === 'card-only' && (
+        <style>{`
+          @media print {
+            @page { size: 85.6mm 53.98mm; margin: 0; }
+            .printable-member-id-card {
+              position: static !important;
+              left: auto !important;
+              top: auto !important;
+              width: 85.6mm !important;
+              height: 53.98mm !important;
+              margin: 0 !important;
+              overflow: hidden !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+          }
+        `}</style>
+      )}
       <div className="w-full max-w-2xl bg-[#0b1226] border border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:border-none print:bg-transparent print:rounded-none">
         {/* Header - Hidden on print */}
-        <div className="flex items-center justify-between p-5 border-b border-amber-500/20 bg-[#070b18] print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 p-5 border-b border-amber-500/20 bg-[#070b18] print:hidden">
           <div className="flex items-center gap-2.5">
             <IdCard className="w-5 h-5 text-amber-400" />
             <div>
@@ -263,11 +324,20 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2 flex-wrap">
+            <button
+              onClick={handleDownloadCard}
+              disabled={downloadingCard}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-colors shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
+              title="Unduh kartu ID-1 sebagai PNG"
+            >
+              <Download className={`w-3.5 h-3.5 ${downloadingCard ? 'animate-bounce' : ''}`} />
+              <span>{downloadingCard ? 'Membuat…' : 'Unduh Kartu'}</span>
+            </button>
             <button
               onClick={handlePrintCardOnly}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors shadow-lg shadow-amber-500/20 cursor-pointer"
-              title="Cetak khusus kartu ID saja (ukuran kartu)"
+              title="Cetak kartu ID-1 berukuran 85,60 × 53,98 mm"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak Kartu</span>
@@ -360,7 +430,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
           {/* Digital Member Card Visual (Printable ID Card with chosen theme) */}
           <div
             ref={cardRef}
-            className={`p-6 rounded-2xl ${currentTheme.bgClass} ${currentTheme.borderClass} shadow-2xl relative overflow-hidden print:m-0 print:shadow-none print:[print-color-adjust:exact] print:[-webkit-print-color-adjust:exact] transition-all duration-300`}
+            className={`p-6 rounded-2xl ${currentTheme.bgClass} ${currentTheme.borderClass} shadow-2xl relative overflow-hidden print:m-0 print:shadow-none print:[print-color-adjust:exact] print:[-webkit-print-color-adjust:exact] transition-all duration-300 ${printMode === 'card-only' ? 'print:hidden' : ''}`}
           >
             {/* Watermark Crest */}
             <div className="absolute right-4 -bottom-6 opacity-10 pointer-events-none w-48 h-48">
@@ -551,6 +621,51 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
                 TERDAFTAR SEJAK: {formatDateDMY(member.joinDate)}
               </div>
             </div>
+          </div>
+
+          {/* Exact ID-1 card used for PNG download and card-only printing. */}
+          <div
+            ref={downloadCardRef}
+            aria-hidden="true"
+            className={`printable-member-id-card ${currentTheme.bgClass} ${currentTheme.borderClass} rounded-[2mm] relative overflow-hidden ${printMode === 'card-only' ? 'print:block' : 'print:hidden'}`}
+            style={{
+              position: 'fixed', left: '-10000px', top: 0,
+              width: '85.6mm', height: '53.98mm', padding: '2.5mm',
+              boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
+              fontFamily: 'Arial, sans-serif',
+            }}
+          >
+            <div className="absolute right-0 bottom-0 w-[28mm] h-[28mm] opacity-10 pointer-events-none">
+              <img src="/images/regenerated_image_1792510154483.png" alt="" className="w-full h-full object-contain" />
+            </div>
+            <div className={`flex items-center justify-between border-b ${currentTheme.dividerColor} pb-[1.2mm] mb-[1.5mm] relative z-10`}>
+              <div className="flex items-center gap-[1.5mm] min-w-0">
+                <img src="/images/regenerated_image_1792510154483.png" alt="" className="w-[8mm] h-[8mm] rounded-full object-cover shrink-0" />
+                <div className="min-w-0">
+                  <div className={`text-[5pt] font-bold uppercase ${currentTheme.headerSub}`}>Gereja Masehi Injili di Timor</div>
+                  <div className={`text-[7pt] font-extrabold leading-tight ${currentTheme.titleColor}`}>GMIT BETEL FUIMELANG</div>
+                  <div className={`text-[4.5pt] ${currentTheme.labelColor}`}>Klasis Alor Tengah Utara</div>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className={`text-[4.5pt] font-bold ${currentTheme.accentText}`}>KARTU JEMAAT</div>
+                <div className={`text-[4.5pt] font-mono ${currentTheme.labelColor}`}>{member.memberNo}</div>
+              </div>
+            </div>
+            <div className="flex gap-[2.5mm] flex-1 min-h-0 relative z-10">
+              <div className={`w-[16mm] h-[21mm] shrink-0 rounded-[1.5mm] border overflow-hidden flex items-center justify-center ${currentTheme.photoBg}`}>
+                {(currentPhoto || member.photoUrl) ? <img src={currentPhoto || member.photoUrl} alt="" className="w-full h-full object-cover" /> : <User className={`w-[7mm] h-[7mm] ${currentTheme.labelColor}`} />}
+              </div>
+              <div className="flex-1 min-w-0 grid grid-cols-2 gap-x-[2mm] gap-y-[1mm] content-start text-[5.2pt]">
+                <div className="col-span-2 mb-[0.5mm]"><div className={`text-[4.5pt] ${currentTheme.labelColor}`}>NAMA ANGGOTA JEMAAT</div><div className={`text-[7.5pt] leading-tight font-extrabold ${currentTheme.titleColor}`}>{member.fullName}</div></div>
+                <div className="col-span-2"><span className={currentTheme.labelColor}>Tempat/tgl lahir: </span><span className={`font-semibold ${currentTheme.textColor}`}>{member.birthPlace || '-'}, {formatDateDMY(member.birthDate)}</span></div>
+                <div><span className={currentTheme.labelColor}>L/P: </span><span className={`font-semibold ${currentTheme.textColor}`}>{member.gender === 'Laki-laki' ? 'L' : member.gender === 'Perempuan' ? 'P' : '-'}</span></div>
+                <div><span className={currentTheme.labelColor}>Rayon: </span><span className={`font-bold ${currentTheme.accentText}`}>{member.rayonName || member.rayonId || '-'}</span></div>
+                <div className="col-span-2"><span className={currentTheme.labelColor}>Sakramen: </span><span className={`font-semibold ${currentTheme.textColor}`}>Baptis {member.baptismStatus} · Sidi {member.confirmationStatus}</span></div>
+                <div className="col-span-2 truncate"><span className={currentTheme.labelColor}>Alamat: </span><span className={currentTheme.textColor}>{member.address || '-'}</span></div>
+              </div>
+            </div>
+            <div className={`border-t ${currentTheme.dividerColor} pt-[1mm] mt-[1mm] flex justify-between text-[4.3pt] relative z-10`}><span className={currentTheme.labelColor}>Kartu identitas anggota · ID-1</span><span className={currentTheme.footerText}>Terdaftar: {formatDateDMY(member.joinDate)}</span></div>
           </div>
 
           {/* Full Detailed Breakdown */}

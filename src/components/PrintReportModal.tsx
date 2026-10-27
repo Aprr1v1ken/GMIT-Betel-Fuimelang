@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
 import { X, Printer, Download, BookOpen } from 'lucide-react';
 import { formatRupiah, formatDateDMY } from '../utils/church-logic.ts';
-import type { Member, Family, FinancialTransaction, Rayon, CategorialGroup } from '../types/index.ts';
+import type { Member, Family, FinancialTransaction, Rayon, CategorialGroup, ChurchSettings } from '../types/index.ts';
+import { OfficialLetterhead } from './OfficialLetterhead.tsx';
+import { DEFAULT_CHURCH_SETTINGS } from '../utils/church-settings.ts';
 
 interface PrintReportModalProps {
   isOpen: boolean;
@@ -11,6 +13,7 @@ interface PrintReportModalProps {
   families: Family[];
   rayons: Rayon[];
   transactions: FinancialTransaction[];
+  churchSettings?: ChurchSettings;
 }
 
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({
@@ -21,6 +24,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   families,
   rayons,
   transactions,
+  churchSettings = DEFAULT_CHURCH_SETTINGS,
 }) => {
   const [selectedType, setSelectedType] = React.useState(reportType);
 
@@ -73,36 +77,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
         {/* Printable Document A4 Body */}
         <div className="flex-1 overflow-y-auto p-8 sm:p-12 print:p-0 font-serif text-slate-900 leading-relaxed bg-white">
-          {/* Official Kop Surat GMIT BETEL FUIMELANG */}
-          <div className="flex items-center justify-between border-b-2 border-black pb-4 mb-6">
-            <div className="w-20 h-20 shrink-0">
-              <img
-                src="/images/regenerated_image_1792510154483.png"
-                alt="Logo GMIT"
-                className="w-full h-full object-contain"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-
-            <div className="text-center flex-1 px-4">
-              <div className="text-sm font-bold uppercase tracking-wider font-sans">
-                GEREJA MASEHI INJILI DI TIMOR (GMIT)
-              </div>
-              <div className="text-xs uppercase font-sans tracking-wide">
-                (Gereja Anggota PGI) · SINODE GMIT KUPANG
-              </div>
-              <div className="text-base font-extrabold uppercase tracking-wide font-sans mt-0.5">
-                KLASIS ALOR TENGAH UTARA — MAJELIS JEMAAT BETEL FUIMELANG
-              </div>
-              <div className="text-[11px] font-sans text-slate-600 mt-0.5">
-                Alamat: Jl. Raya Fuimelang - Moru, Desa Lembur Tengah, Kec. Alor Tengah Utara, Kab. Alor, Nusa Tenggara Timur
-              </div>
-            </div>
-
-            <div className="w-20 shrink-0 text-right text-[10px] font-mono font-sans text-slate-500">
-              SYSJEGER V2.0
-            </div>
-          </div>
+          {/* Centralized, Super Admin-configurable official letterhead. */}
+          <OfficialLetterhead settings={churchSettings} />
 
           {/* Document Title */}
           <div className="text-center mb-6">
@@ -243,27 +219,16 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
             <div className="grid grid-cols-2 gap-12 text-center">
               <div>
-                <div className="text-slate-600 mb-16">
-                  Ketua Majelis Jemaat / Pendeta
+                <div className="text-slate-600">{churchSettings.signerRole}</div>
+                <div className="h-16 flex items-center justify-center">
+                  {churchSettings.stampUrl && <img src={churchSettings.stampUrl} alt="Cap resmi" className="max-h-full max-w-24 object-contain" />}
                 </div>
-                <div className="font-bold underline text-sm">
-                  Pdt. Sonya W. Isu, S.Th
-                </div>
-                <div className="text-[11px] text-slate-600">
-                  Pendeta GMIT / NIP Presbiter
-                </div>
+                <div className="font-bold underline text-sm">{churchSettings.signerName || '............................'}</div>
               </div>
 
               <div>
-                <div className="text-slate-600 mb-16">
-                  Sekretaris Majelis Jemaat
-                </div>
-                <div className="font-bold underline text-sm">
-                  Dkn. Elisabeth Lopo
-                </div>
-                <div className="text-[11px] text-slate-600">
-                  Diaken Tata Usaha Jemaat
-                </div>
+                <div className="text-slate-600 mb-16">{churchSettings.secretaryRole || 'Sekretaris Majelis Jemaat'}</div>
+                <div className="font-bold underline text-sm">{churchSettings.secretaryName || '............................'}</div>
               </div>
             </div>
           </div>

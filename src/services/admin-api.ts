@@ -6,11 +6,12 @@ import type {
   FinancialTransaction,
   MutationRecord,
   Rayon,
+  User,
 } from '../types/index.ts';
 
 const API_BASE = '/api';
 
-async function request(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
+async function request(path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', body?: unknown) {
   const res = await apiFetch(`${API_BASE}${path}`, {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -22,6 +23,11 @@ async function request(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: u
   }
   return payload;
 }
+
+export const fetchUsersApi = () => request('/users', 'GET');
+export const createUserApi = (data: Partial<User> & { password?: string }) => request('/users', 'POST', data);
+export const updateUserApi = (id: string, data: Partial<User> & { password?: string }) => request(`/users/${id}`, 'PUT', data);
+export const deleteUserApi = (id: string) => request(`/users/${id}`, 'DELETE');
 
 export const createRayonApi = (data: Partial<Rayon>) => request('/rayons', 'POST', data);
 export const updateRayonApi = (id: string, data: Partial<Rayon>) => request(`/rayons/${id}`, 'PUT', data);

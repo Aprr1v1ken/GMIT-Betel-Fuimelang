@@ -22,7 +22,9 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import type { FinancialTransaction, Member, Rayon } from '../types/index.ts';
+import type { FinancialTransaction, Member, Rayon, ChurchSettings } from '../types/index.ts';
+import { OfficialLetterhead } from './OfficialLetterhead.tsx';
+import { DEFAULT_CHURCH_SETTINGS } from '../utils/church-settings.ts';
 
 interface WartaPdfModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ interface WartaPdfModalProps {
   transactions?: FinancialTransaction[];
   members?: Member[];
   rayons?: Rayon[];
+  churchSettings?: ChurchSettings;
 }
 
 export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
@@ -38,6 +41,7 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
   transactions = [],
   members = [],
   rayons = [],
+  churchSettings = DEFAULT_CHURCH_SETTINGS,
 }) => {
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'whatsapp'>('preview');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -340,33 +344,7 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
                 >
                   {/* Kop Surat Gereja */}
                   <div>
-                    <div className="border-b-2 border-slate-900 pb-3 mb-4 text-center">
-                      <div className="flex items-center justify-between">
-                        <div className="w-16 h-16 flex items-center justify-center border-2 border-slate-900 rounded-full font-serif font-black text-xl text-slate-900">
-                          GMIT
-                        </div>
-                        <div className="flex-1 px-4 text-center">
-                          <h1 className="text-sm font-extrabold tracking-wider uppercase text-slate-900 font-serif">
-                            GEREJA MASEHI INJILI DI TIMOR (GMIT)
-                          </h1>
-                          <h2 className="text-base font-black tracking-wide text-slate-950 font-serif">
-                            JEMAAT BETEL FUIMELANG
-                          </h2>
-                          <p className="text-[10px] text-slate-700 tracking-tight font-medium">
-                            Klasis Alor Tengah Utara · Wilayah Pelayanan Rayon I s/d IV
-                          </p>
-                          <p className="text-[9px] text-slate-600">
-                            Desa Lembur Tengah, Kec. Alor Tengah Utara, Kab. Alor, Nusa Tenggara Timur
-                          </p>
-                        </div>
-                        <div className="w-16 h-16 flex flex-col items-center justify-center border border-slate-400 rounded-lg text-[9px] text-slate-500 font-mono">
-                          <span>EDISI</span>
-                          <span className="font-bold text-slate-900 text-xs">2026</span>
-                        </div>
-                      </div>
-                      <div className="h-0.5 bg-slate-900 mt-2" />
-                      <div className="h-px bg-slate-400 mt-0.5" />
-                    </div>
+                    <OfficialLetterhead settings={churchSettings} compact />
 
                     {/* Banner Warta Jemaat */}
                     <div className="bg-slate-100 border border-slate-300 p-2.5 rounded-lg mb-4 text-center">
@@ -480,12 +458,11 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
                     <div className="flex justify-between items-end">
                       <div className="text-center w-48">
                         <p className="text-slate-600">Mengetahui,</p>
-                        <p className="font-bold text-slate-900">Ketua Majelis Jemaat</p>
+                        <p className="font-bold text-slate-900">{churchSettings.signerRole}</p>
                         <div className="h-12 flex items-center justify-center text-[9px] text-slate-400 italic">
-                          (Tanda Tangan & Cap)
+                          {churchSettings.stampUrl ? <img src={churchSettings.stampUrl} alt="Cap resmi" className="max-h-full max-w-20 object-contain" /> : '(Tanda Tangan & Cap)'}
                         </div>
-                        <p className="font-bold underline text-slate-950">Pdt. Sonya W. Isu, S.Th</p>
-                        <p className="text-[8.5px] text-slate-600">Pendeta Jemaat GMIT Betel</p>
+                        <p className="font-bold underline text-slate-950">{churchSettings.signerName || '............................'}</p>
                       </div>
 
                       <div className="text-center text-[9px] text-slate-500 max-w-[200px]">
@@ -495,12 +472,11 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
 
                       <div className="text-center w-48">
                         <p className="text-slate-600">Fuimelang, {new Date(wartaDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                        <p className="font-bold text-slate-900">Sekretaris Majelis</p>
+                        <p className="font-bold text-slate-900">{churchSettings.secretaryRole || 'Sekretaris Majelis Jemaat'}</p>
                         <div className="h-12 flex items-center justify-center text-[9px] text-slate-400 italic">
                           (Tanda Tangan)
                         </div>
-                        <p className="font-bold underline text-slate-950">Dkn. Elisabeth Lopo</p>
-                        <p className="text-[8.5px] text-slate-600">Tata Usaha Gereja</p>
+                        <p className="font-bold underline text-slate-950">{churchSettings.secretaryName || '............................'}</p>
                       </div>
                     </div>
                   </div>

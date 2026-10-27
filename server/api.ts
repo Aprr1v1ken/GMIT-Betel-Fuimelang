@@ -160,6 +160,137 @@ apiRouter.get('/auth/session', (req, res) => {
   res.json({ success: true, user, token: issueSession(user.id) });
 });
 
+const MANAGED_USER_ROLES = ['Super Admin', 'Admin Gereja', 'Ketua Majelis/Pendeta', 'Majelis/Rayon', 'Jemaat'] as const;
+type ManagedUserRole = typeof MANAGED_USER_ROLES[number];
+type ManagedUserValidation =
+  | { error: string; role?: never }
+  | { error?: never; role: ManagedUserRole };
+
+function validateManagedUser(data: any, requirePassword: boolean): ManagedUserValidation {
+  const username = String(data.username || '').trim();
+  if (requirePassword && !/^[A-Za-z0-9._-]{3,40}$/.test(username)) {
+    return { error: 'Username harus 3–40 karakter dan hanya memakai huruf, angka, titik, strip, atau garis bawah.' };
+  }
+  if (!String(data.name || '').trim()) return { error: 'Nama lengkap pengguna wajib diisi.' };
+  if (!MANAGED_USER_ROLES.includes(data.role)) return { error: 'Peran pengguna tidak valid.' };
+  if (data.role === 'Majelis/Rayon' && !data.rayonId) return { error: 'Pilih rayon untuk akun Majelis/Rayon.' };
+  if (data.role === 'Jemaat' && !data.memberId) return { error: 'Pilih data jemaat yang terhubung dengan akun Jemaat.' };
+  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.email))) return { error: 'Format email tidak valid.' };
+  if ((requirePassword || data.password) && String(data.password || '').length < 8) {
+    return { error: 'Kata sandi minimal 8 karakter.' };
+  }
+  if (data.status && !['Aktif', 'Nonaktif'].includes(data.status)) return { error: 'Status akun tidak valid.' };
+  return { role: data.role };
+}
+
+function hasAnotherActiveSuperAdmin(db: any, excludedId: string): boolean {
+  const row = db.prepare("SELECT count(*) AS count FROM users WHERE role = 'Super Admin' AND status = 'Aktif' AND id != ?").get(excludedId) as { count: number };
+  return Number(row.count) > 0;
+}
+
+// Super Admin user administration. The /users middleware above enforces the
+// role again at the server boundary; hiding these controls in the UI is not
+// treated as authorization.
+apiRouter.get('/users', (_req, res) => {
+  const rows = getDb().prepare('SELECT * FROM users ORDER BY name ASC').all() as any[];
+  res.json({ success: true, users: rows.map(toPublicUser) });
+});
+
+apiRouter.post('/users', (req, res) => {
+  const actor = (req as any).authUser;
+  const data = req.body || {};
+  const validation = validateManagedUser(data, true);
+  if (validation.error) return res.status(400).json({ success: false, message: validation.error });
+  const db = getDb();
+  const username = String(data.username).trim().toLowerCase();
+  const duplicate = db.prepare('SELECT id FROM users WHERE lower(username) = lower(?)').get(username);
+  if (duplicate) return res.status(409).json({ success: false, message: 'Username sudah digunakan.' });
+  const email = String(data.email || '').trim().toLowerCase();
+  if (email && db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(email)) {
+    return res.status(409).json({ success: false, message: 'Email sudah terhubung dengan akun lain.' });
+  }
+  const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const now = new Date().toISOString();
+  try {
+    db.prepare(`
+      INSERT INTO users (id, username, password_hash, name, role, rayon_id, member_id, phone, email, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, username, hashPassword(String(data.password)), String(data.name).trim(), validation.role!,
+      data.rayonId || null, data.memberId || null, String(data.phone || '').trim() || null,
+      email || null, data.status || 'Aktif', now,
+    );
+    addAuditLog(actor.id, actor.name, 'Tambah Pengguna', 'Manajemen Pengguna', `Membuat akun ${username} dengan peran ${validation.role}`);
+    const created = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    res.status(201).json({ success: true, user: toPublicUser(created), message: 'Pengguna berhasil ditambahkan.' });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error?.message || 'Pengguna gagal ditambahkan.' });
+  }
+});
+
+apiRouter.put('/users/:id', (req, res) => {
+  const actor = (req as any).authUser;
+  const id = String(req.params.id);
+  const data = { ...(req.body || {}), username: 'existing-user' };
+  const validation = validateManagedUser(data, false);
+  if (validation.error) return res.status(400).json({ success: false, message: validation.error });
+  const db = getDb();
+  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+  if (!existing) return res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+  const email = String(data.email || '').trim().toLowerCase();
+  if (email && db.prepare('SELECT id FROM users WHERE lower(email) = lower(?) AND id != ?').get(email, id)) {
+    return res.status(409).json({ success: false, message: 'Email sudah terhubung dengan akun lain.' });
+  }
+  const status = data.status || 'Aktif';
+  if (id === actor.id && (validation.role !== actor.role || status !== 'Aktif')) {
+    return res.status(400).json({ success: false, message: 'Anda tidak dapat mengubah peran atau menonaktifkan akun sendiri.' });
+  }
+  if (id === 'u1' && (validation.role !== 'Super Admin' || status !== 'Aktif')) {
+    return res.status(400).json({ success: false, message: 'Akun Super Admin utama tidak dapat diturunkan atau dinonaktifkan.' });
+  }
+  if (existing.role === 'Super Admin' && (validation.role !== 'Super Admin' || status !== 'Aktif') && !hasAnotherActiveSuperAdmin(db, id)) {
+    return res.status(400).json({ success: false, message: 'Sistem harus memiliki sedikitnya satu Super Admin aktif.' });
+  }
+  try {
+    db.prepare(`
+      UPDATE users SET name = ?, role = ?, rayon_id = ?, member_id = ?, phone = ?, email = ?, status = ? WHERE id = ?
+    `).run(
+      String(data.name).trim(), validation.role!, data.rayonId || null, data.memberId || null,
+      String(data.phone || '').trim() || null, email || null, status, id,
+    );
+    if (data.password) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(data.password)), id);
+    addAuditLog(actor.id, actor.name, 'Ubah Pengguna', 'Manajemen Pengguna', `Memperbarui akun ${existing.username}${data.password ? ' dan mengganti kata sandi' : ''}`);
+    const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    res.json({ success: true, user: toPublicUser(updated), message: 'Data pengguna berhasil diperbarui.' });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error?.message || 'Pengguna gagal diperbarui.' });
+  }
+});
+
+apiRouter.delete('/users/:id', (req, res) => {
+  const actor = (req as any).authUser;
+  const id = String(req.params.id);
+  if (id === actor.id) return res.status(400).json({ success: false, message: 'Anda tidak dapat menghapus akun sendiri.' });
+  if (id === 'u1') return res.status(400).json({ success: false, message: 'Akun Super Admin utama tidak dapat dihapus.' });
+  const db = getDb();
+  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+  if (!existing) return res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+  if (existing.role === 'Super Admin' && !hasAnotherActiveSuperAdmin(db, id)) {
+    return res.status(400).json({ success: false, message: 'Super Admin aktif terakhir tidak dapat dihapus.' });
+  }
+  try {
+    db.exec('BEGIN');
+    db.prepare('DELETE FROM webauthn_credentials WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    db.exec('COMMIT');
+  } catch (error: any) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ success: false, message: error?.message || 'Pengguna gagal dihapus.' });
+  }
+  addAuditLog(actor.id, actor.name, 'Hapus Pengguna', 'Manajemen Pengguna', `Menghapus akun ${existing.username}`);
+  res.json({ success: true, message: 'Pengguna berhasil dihapus.' });
+});
+
 function getSafeNextMemberNo(db: any): string {
   const prefix = 'GMIT-BF-2026-';
   const existing = db.prepare("SELECT member_no FROM members WHERE member_no LIKE ?").all(`${prefix}%`) as { member_no: string }[];
@@ -617,6 +748,8 @@ apiRouter.get('/rayons', (req, res) => {
     familyCount: r.family_count,
     memberCount: r.member_count,
     notes: r.notes || '',
+    latitude: r.latitude == null ? null : Number(r.latitude),
+    longitude: r.longitude == null ? null : Number(r.longitude),
   }))});
 });
 
@@ -1166,41 +1299,162 @@ apiRouter.post('/finance', (req, res) => {
   }
 });
 
-// 11. Digital Documents
+function mapChurchSettings(row: any) {
+  return {
+    id: row.id,
+    churchName: row.church_name,
+    klasis: row.klasis,
+    address: row.address || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    logoUrl: row.logo_url || '',
+    stampUrl: row.stamp_url || '',
+    signerName: row.signer_name || '',
+    signerRole: row.signer_role || '',
+    secretaryName: row.secretary_name || '',
+    secretaryRole: row.secretary_role || '',
+    updatedAt: row.updated_at || '',
+  };
+}
+
+function validLetterheadImage(value: unknown, allowEmpty = false) {
+  if (allowEmpty && !value) return true;
+  if (typeof value !== 'string' || value.length > 1_500_000) return false;
+  return /^\/images\/[A-Za-z0-9._/-]+$/.test(value) || /^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(value);
+}
+
+apiRouter.get('/settings/church', (_req, res) => {
+  const row = getDb().prepare("SELECT * FROM church_settings WHERE id = 'gmit-betel-fuimelang'").get();
+  if (!row) return res.status(404).json({ success: false, message: 'Pengaturan kop belum tersedia.' });
+  res.json({ success: true, settings: mapChurchSettings(row) });
+});
+
+apiRouter.put('/settings/church', (req, res) => {
+  const actor = (req as any).authUser;
+  if (!isSuperAdmin(actor)) return res.status(403).json({ success: false, message: 'Hanya Super Admin yang dapat mengubah kop resmi.' });
+  const data = req.body || {};
+  if (!String(data.churchName || '').trim() || !String(data.klasis || '').trim()) {
+    return res.status(400).json({ success: false, message: 'Nama gereja/jemaat dan klasis wajib diisi.' });
+  }
+  if (!validLetterheadImage(data.logoUrl) || !validLetterheadImage(data.stampUrl, true)) {
+    return res.status(400).json({ success: false, message: 'Logo/cap tidak valid atau terlalu besar. Gunakan PNG, JPG, atau WebP.' });
+  }
+  const text = (value: unknown, max = 500) => String(value || '').trim().slice(0, max);
+  const updatedAt = new Date().toISOString();
+  const db = getDb();
+  db.prepare(`
+    UPDATE church_settings SET church_name = ?, klasis = ?, address = ?, phone = ?, email = ?,
+      logo_url = ?, stamp_url = ?, signer_name = ?, signer_role = ?, secretary_name = ?, secretary_role = ?, updated_at = ?
+    WHERE id = 'gmit-betel-fuimelang'
+  `).run(
+    text(data.churchName, 250), text(data.klasis, 200), text(data.address), text(data.phone, 100), text(data.email, 150),
+    data.logoUrl, data.stampUrl || '', text(data.signerName, 150), text(data.signerRole, 150),
+    text(data.secretaryName, 150), text(data.secretaryRole, 150), updatedAt,
+  );
+  addAuditLog(actor.id, actor.name, 'Ubah Kop Resmi', 'Pengaturan Gereja', 'Memperbarui identitas kop, logo, cap, dan penanda tangan');
+  const row = db.prepare("SELECT * FROM church_settings WHERE id = 'gmit-betel-fuimelang'").get();
+  res.json({ success: true, settings: mapChurchSettings(row), message: 'Kop resmi berhasil disimpan dan disinkronkan.' });
+});
+
+// 11. Digital Documents. Binary content stays out of list responses and is
+// downloaded one record at a time after the same role/access checks.
+const DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf', 'image/jpeg', 'image/png', 'image/webp',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+]);
+const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
+
+function canAccessDocument(user: any, accessLevel: string) {
+  if (accessLevel !== 'Admin') return true;
+  return isSuperAdmin(user) || user?.role === 'Admin Gereja';
+}
+
+type ParsedDocumentFile =
+  | { fileData: string; mimeType: string; fileSize: string; error?: never }
+  | { error: string; fileData?: never; mimeType?: never; fileSize?: never };
+
+function parseDocumentFile(fileData: unknown): ParsedDocumentFile {
+  if (typeof fileData !== 'string') return { error: 'Pilih berkas dokumen yang akan diunggah.' };
+  const match = /^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,([a-z0-9+/=\r\n]+)$/i.exec(fileData);
+  if (!match || !DOCUMENT_MIME_TYPES.has(match[1].toLowerCase())) {
+    return { error: 'Format berkas harus PDF, JPG, PNG, WebP, DOC/DOCX, XLS/XLSX, atau TXT.' };
+  }
+  const bytes = Buffer.from(match[2], 'base64');
+  if (!bytes.length || bytes.length > MAX_DOCUMENT_BYTES) return { error: 'Berkas dokumen harus berisi dan berukuran maksimal 2 MB.' };
+  const fileSize = bytes.length < 1024 * 1024
+    ? `${(bytes.length / 1024).toFixed(1)} KB`
+    : `${(bytes.length / (1024 * 1024)).toFixed(2)} MB`;
+  return { fileData, mimeType: match[1].toLowerCase(), fileSize };
+}
+
+function documentMetadata(d: any) {
+  return {
+    id: d.id,
+    docNo: d.doc_no,
+    title: d.title,
+    category: d.category,
+    memberId: d.member_id || '',
+    fileName: d.file_name,
+    fileSize: d.file_size,
+    uploadDate: d.upload_date,
+    accessLevel: d.access_level,
+    mimeType: d.mime_type || '',
+    hasFile: Boolean(d.file_data),
+  };
+}
+
 apiRouter.get('/documents', (req, res) => {
   const db = getDb();
+  const user = (req as any).authUser;
   const rows = db.prepare('SELECT * FROM documents ORDER BY upload_date DESC').all() as any[];
+  const documents = rows.filter((d) => canAccessDocument(user, d.access_level)).map(documentMetadata);
+  res.json({ success: true, documents });
+});
+
+apiRouter.get('/documents/:id/file', (req, res) => {
+  const db = getDb();
+  const user = (req as any).authUser;
+  const document = db.prepare('SELECT * FROM documents WHERE id = ?').get(String(req.params.id)) as any;
+  if (!document) return res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan.' });
+  if (!canAccessDocument(user, document.access_level)) return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses ke berkas ini.' });
+  if (!document.file_data) return res.status(404).json({ success: false, message: 'Arsip lama ini belum memiliki berkas asli. Unggah ulang sebagai dokumen baru.' });
+  addAuditLog(user.id, user.name, 'Unduh Dokumen', 'Dokumen & Arsip', `Mengunduh ${document.doc_no}: ${document.title}`);
   res.json({
     success: true,
-    documents: rows.map(d => ({
-      id: d.id,
-      docNo: d.doc_no,
-      title: d.title,
-      category: d.category,
-      memberId: d.member_id,
-      fileName: d.file_name,
-      fileSize: d.file_size,
-      uploadDate: d.upload_date,
-      accessLevel: d.access_level,
-    })),
+    file: {
+      ...documentMetadata(document),
+      fileData: document.file_data,
+      mimeType: document.mime_type || 'application/octet-stream',
+    },
   });
 });
 
 apiRouter.post('/documents', (req, res) => {
   const db = getDb();
-  const data = req.body;
-  const id = 'doc-' + Date.now();
-  const docNo = data.docNo || `DOC-BF-${Date.now().toString().slice(-4)}`;
+  const user = (req as any).authUser;
+  const data = req.body || {};
+  if (!String(data.title || '').trim()) return res.status(400).json({ success: false, message: 'Judul dokumen wajib diisi.' });
+  const parsed = parseDocumentFile(data.fileData);
+  if (parsed.error) return res.status(400).json({ success: false, message: parsed.error });
+  const id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const docNo = data.docNo || `DOC-BF-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
   const now = new Date().toISOString().substring(0, 10);
+  const accessLevel = ['Publik', 'Majelis', 'Admin'].includes(data.accessLevel) ? data.accessLevel : 'Admin';
 
   try {
     db.prepare(`
-      INSERT INTO documents (id, doc_no, title, category, member_id, file_name, file_size, upload_date, access_level)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, docNo, data.title, data.category, data.memberId || null, data.fileName || `${data.title.replace(/\s+/g, '_')}.pdf`, data.fileSize || '1.2 MB', now, data.accessLevel || 'Publik');
-
-    addAuditLog('admin', 'Admin', 'Unggah Dokumen Digital', 'Dokumen & Arsip', `Menyimpan arsip dokumen: ${data.title}`);
-    res.json({ success: true, message: 'Dokumen digital berhasil diarsipkan' });
+      INSERT INTO documents (id, doc_no, title, category, member_id, file_name, file_size, upload_date, access_level, mime_type, file_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, docNo, String(data.title).trim(), data.category || 'Lainnya', data.memberId || null,
+      String(data.fileName || 'dokumen').replace(/[\\/\0]/g, '_'), parsed.fileSize!, now, accessLevel,
+      parsed.mimeType!, parsed.fileData!,
+    );
+    addAuditLog(user.id, user.name, 'Unggah Dokumen Digital', 'Dokumen & Arsip', `Menyimpan berkas asli ${docNo}: ${data.title}`);
+    const created = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
+    res.status(201).json({ success: true, document: documentMetadata(created), message: 'Berkas dokumen berhasil disimpan.' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1597,7 +1851,7 @@ apiRouter.get('/backup', (req, res) => {
   const tables = [
     'users', 'webauthn_credentials', 'rayons', 'categorial_groups', 'families', 'members',
     'church_staff', 'baptisms', 'confirmations', 'marriages', 'member_mutations',
-    'events', 'service_schedules', 'attendance_records', 'financial_transactions',
+    'events', 'service_schedules', 'attendance_records', 'financial_transactions', 'church_settings',
     'documents', 'announcements', 'activity_images', 'data_correction_requests', 'audit_logs'
   ];
 
