@@ -133,8 +133,8 @@ export const PublicLanding: React.FC<PublicLandingProps> = ({
         <div className="flex items-center gap-3">
           <img
             src="/images/regenerated_image_1792510154483.png"
-            alt="Emblem GMIT"
-            className="w-10 h-10 rounded-full border border-amber-400/50 object-cover shadow-md shrink-0"
+            alt="Cap resmi GMIT Betel Fuimelang"
+            className="w-10 h-10 rounded-full border border-amber-400/50 object-contain bg-white p-0.5 shadow-md shrink-0"
             referrerPolicy="no-referrer"
           />
           <div>

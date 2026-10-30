@@ -123,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <img
               src="/images/regenerated_image_1792510154483.png"
               alt="GMIT Betel Fuimelang"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain bg-white p-0.5"
               referrerPolicy="no-referrer"
             />
           </div>

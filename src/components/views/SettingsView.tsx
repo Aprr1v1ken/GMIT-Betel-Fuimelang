@@ -186,7 +186,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="space-y-4 max-w-2xl">
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-400/40 p-2 shrink-0 shadow-lg flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-white border border-amber-400/40 p-2 shrink-0 shadow-lg flex items-center justify-center">
                 <img
                   src="/images/regenerated_image_1792510154483.png"
                   alt="Ikon GMIT Betel Fuimelang"
