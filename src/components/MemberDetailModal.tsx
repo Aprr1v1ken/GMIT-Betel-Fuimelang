@@ -470,8 +470,8 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
               <div className="flex items-center gap-3">
                 <img
                   src="/images/regenerated_image_1792510154483.png"
-                  alt="GMIT Logo"
-                  className="chromatic-logo-frame w-10 h-10 rounded-full border border-amber-400/60 object-cover shadow-sm shrink-0"
+                  alt="Cap resmi GMIT Betel Fuimelang"
+                  className="chromatic-logo-frame w-10 h-10 rounded-full border border-amber-400/60 object-contain bg-white p-0.5 shadow-sm shrink-0"
                   referrerPolicy="no-referrer"
                 />
                 <div>
@@ -668,7 +668,7 @@ export const MemberDetailModal: React.FC<MemberDetailModalProps> = ({
             </div>
             <div className={`flex items-center justify-between border-b ${currentTheme.dividerColor} pb-[1.2mm] mb-[1.5mm] relative z-10`}>
               <div className="flex items-center gap-[1.5mm] min-w-0">
-                <img src="/images/regenerated_image_1792510154483.png" alt="" className="chromatic-logo-frame w-[8mm] h-[8mm] rounded-full object-cover shrink-0" />
+                <img src="/images/regenerated_image_1792510154483.png" alt="" className="chromatic-logo-frame w-[8mm] h-[8mm] rounded-full object-contain bg-white p-[0.25mm] shrink-0" />
                 <div className="min-w-0">
                   <div className={`text-[5pt] font-bold uppercase ${currentTheme.headerSub}`}>Gereja Masehi Injili di Timor</div>
                   <div className={`chromatic-foil-text text-[7pt] font-extrabold leading-tight ${currentTheme.titleColor}`}>GMIT BETEL FUIMELANG</div>
