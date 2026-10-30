@@ -1,6 +1,7 @@
 import React from 'react';
-import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, Marker, Pin } from '@vis.gl/react-google-maps';
 import { ExternalLink, MapPin } from 'lucide-react';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_MAP_ID, getStandardMarkerIcon } from '../utils/google-maps.ts';
 
 const DEFAULT_CENTER = { lat: -8.2384, lng: 124.5802 };
 
@@ -9,7 +10,8 @@ export const RayonMapPicker: React.FC<{
   longitude: string;
   onSelect: (latitude: number, longitude: number) => void;
 }> = ({ latitude, longitude, onSelect }) => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const apiKey = GOOGLE_MAPS_API_KEY;
+  const mapId = GOOGLE_MAPS_MAP_ID;
   const lat = Number(latitude);
   const lng = Number(longitude);
   const valid = latitude !== '' && longitude !== '' && Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
@@ -31,7 +33,7 @@ export const RayonMapPicker: React.FC<{
               <Map
                 defaultCenter={position || DEFAULT_CENTER}
                 defaultZoom={position ? 17 : 14}
-                mapId="DEMO_MAP_ID"
+                mapId={mapId}
                 gestureHandling="greedy"
                 disableDefaultUI={false}
                 onClick={(event: any) => {
@@ -39,7 +41,13 @@ export const RayonMapPicker: React.FC<{
                   if (point && Number.isFinite(point.lat) && Number.isFinite(point.lng)) onSelect(point.lat, point.lng);
                 }}
               >
-                {position && <AdvancedMarker position={position}><Pin background="#06b6d4" glyphColor="#ffffff" borderColor="#155e75" /></AdvancedMarker>}
+                {position && (mapId ? (
+                  <AdvancedMarker position={position} title="Lokasi rayon">
+                    <Pin background="#06b6d4" glyphColor="#ffffff" borderColor="#155e75" />
+                  </AdvancedMarker>
+                ) : (
+                  <Marker position={position} title="Lokasi rayon" icon={getStandardMarkerIcon('#06b6d4', '#155e75')} />
+                ))}
               </Map>
             </APIProvider>
           </div>

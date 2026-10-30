@@ -3,6 +3,7 @@ import {
   APIProvider,
   Map,
   AdvancedMarker,
+  Marker,
   Pin,
   InfoWindow,
 } from '@vis.gl/react-google-maps';
@@ -19,6 +20,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import type { Member, Rayon } from '../../types/index.ts';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_MAP_ID, getStandardMarkerIcon } from '../../utils/google-maps.ts';
 
 interface GoogleMapsViewProps {
   members: Member[];
@@ -40,7 +42,8 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
   members,
   rayons,
 }) => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const apiKey = GOOGLE_MAPS_API_KEY;
+  const mapId = GOOGLE_MAPS_MAP_ID;
 
   // Center coordinate: GMIT Betel Fuimelang, Desa Lembur Tengah, Alor Tengah Utara, NTT
   const defaultCenter = { lat: -8.2384, lng: 124.5802 };
@@ -176,7 +179,7 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
               <APIProvider apiKey={apiKey}>
                 <Map
                   id="church-map"
-                  mapId="DEMO_MAP_ID"
+                  mapId={mapId}
                   defaultCenter={defaultCenter}
                   center={center}
                   defaultZoom={14}
@@ -192,19 +195,26 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
                     const isChurch = pt.category === 'church';
                     const isRayon = pt.category === 'rayon';
 
-                    return (
+                    const background = isChurch ? '#f59e0b' : isRayon ? '#10b981' : '#0284c7';
+                    const borderColor = isChurch ? '#b45309' : isRayon ? '#047857' : '#0369a1';
+
+                    return mapId ? (
                       <AdvancedMarker
                         key={pt.id}
                         position={pt.position}
                         title={pt.name}
                         onClick={() => setSelectedPoint(pt)}
                       >
-                        <Pin
-                          background={isChurch ? '#f59e0b' : isRayon ? '#10b981' : '#0284c7'}
-                          borderColor={isChurch ? '#b45309' : isRayon ? '#047857' : '#0369a1'}
-                          glyphColor="#ffffff"
-                        />
+                        <Pin background={background} borderColor={borderColor} glyphColor="#ffffff" />
                       </AdvancedMarker>
+                    ) : (
+                      <Marker
+                        key={pt.id}
+                        position={pt.position}
+                        title={pt.name}
+                        onClick={() => setSelectedPoint(pt)}
+                        icon={getStandardMarkerIcon(background, borderColor)}
+                      />
                     );
                   })}
 
@@ -254,8 +264,8 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
               <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-400">
                 <AlertTriangle className="w-10 h-10 text-amber-400 mb-2" />
                 <p className="text-sm font-bold text-white">Google Maps API Key Belum Terpasang</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Kunci API Google Maps Platform akan otomatis terpasang melalui Environment Secrets.
+                <p className="text-xs text-slate-500 mt-1 max-w-md leading-relaxed">
+                  Tambahkan <code>VITE_GOOGLE_MAPS_API_KEY</code> pada Environment Variables Vercel, lalu deploy ulang. Map ID bersifat opsional; input koordinat manual tetap tersedia di pengaturan rayon.
                 </p>
               </div>
             )}

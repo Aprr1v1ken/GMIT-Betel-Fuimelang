@@ -1130,15 +1130,18 @@ apiRouter.get('/schedules', (req, res) => {
 apiRouter.post('/schedules', (req, res) => {
   const db = getDb();
   const data = req.body;
+  if (!data.serviceDate || !String(data.serviceName || '').trim()) {
+    return res.status(400).json({ success: false, message: 'Tanggal dan nama ibadah wajib diisi' });
+  }
   const id = 'sch-' + Date.now();
   try {
     db.prepare(`
       INSERT INTO service_schedules (id, service_date, service_name, preacher, liturgist, elder_duty, deacon_duty, song_leader, musicians, multimedia_operator, usher, bible_reader, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, data.serviceDate, data.serviceName, data.preacher, data.liturgist, data.elderDuty,
-      data.deaconDuty, data.songLeader, data.musicians, data.multimediaOperator, data.usher,
-      data.bibleReader, data.notes || ''
+      id, data.serviceDate, String(data.serviceName).trim(), data.preacher || '', data.liturgist || '', data.elderDuty || '',
+      data.deaconDuty || '', data.songLeader || '', data.musicians || '', data.multimediaOperator || '', data.usher || '',
+      data.bibleReader || '', data.notes || ''
     );
     addAuditLog('admin', 'Admin', 'Buat Jadwal Petugas Ibadah', 'Jadwal Pelayanan', `Membuat jadwal petugas kebaktian: ${data.serviceName} (${data.serviceDate})`);
     res.json({ success: true, message: 'Jadwal petugas ibadah berhasil disimpan', id });
