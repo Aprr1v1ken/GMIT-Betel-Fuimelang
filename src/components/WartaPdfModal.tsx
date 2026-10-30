@@ -21,7 +21,7 @@ import {
   Edit3,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
+import { toCanvas } from 'html-to-image';
 import type { FinancialTransaction, Member, Rayon, ChurchSettings } from '../types/index.ts';
 import { OfficialLetterhead } from './OfficialLetterhead.tsx';
 import { DEFAULT_CHURCH_SETTINGS } from '../utils/church-settings.ts';
@@ -126,15 +126,14 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
     try {
       const element = pdfPrintRef.current;
       
-      // Temporary styling for capture
-      const canvas = await html2canvas(element, {
-        scale: 2, // High resolution for crisp print
-        useCORS: true,
-        logging: false,
+      // html-to-image uses the browser renderer, which supports the modern
+      // CSS colors used by the application (html2canvas rejects oklch).
+      await Promise.all(Array.from(element.querySelectorAll('img')).map((image) => image.decode().catch(() => undefined)));
+      const canvas = await toCanvas(element, {
+        pixelRatio: 2,
         backgroundColor: '#ffffff',
+        skipFonts: true,
       });
-
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -142,9 +141,20 @@ export const WartaPdfModal: React.FC<WartaPdfModalProps> = ({
       });
 
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const pdfPageHeight = pdf.internal.pageSize.getHeight();
+      const sliceHeight = Math.ceil(canvas.width * pdfPageHeight / pdfWidth);
+      // Long warta must continue onto additional pages rather than being cut off.
+      for (let offset = 0; offset < canvas.height; offset += sliceHeight) {
+        const height = Math.min(sliceHeight, canvas.height - offset);
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = height;
+        const context = slice.getContext('2d');
+        if (!context) throw new Error('Tidak dapat menyiapkan halaman PDF.');
+        context.drawImage(canvas, 0, offset, canvas.width, height, 0, 0, canvas.width, height);
+        if (offset > 0) pdf.addPage();
+        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, height * pdfWidth / canvas.width);
+      }
       
       const fileName = `WARTA_JEMAAT_GMIT_BETEL_${wartaDate}.pdf`;
       pdf.save(fileName);
