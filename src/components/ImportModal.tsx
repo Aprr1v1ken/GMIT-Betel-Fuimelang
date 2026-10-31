@@ -18,6 +18,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   categorials,
 }) => {
   const [csvText, setCsvText] = useState('');
+  const [fileError, setFileError] = useState('');
+  const [fileName, setFileName] = useState('');
   const [previewData, setPreviewData] = useState<Partial<Member>[]>([]);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ imported: number; failed: number; errors: string[] } | null>(null);
@@ -45,7 +47,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           rayonId: cols[5] || '',
           categorialGroupId: cols[6] || '',
           phone: cols[7] || '',
-          familyRole: 'Anggota',
+          familyRole: 'Anak',
           maritalStatus: 'Belum Menikah',
           membershipStatus: 'Tetap',
           baptismStatus: 'Belum',
@@ -59,7 +61,39 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     setPreviewData(parsed);
   };
 
+  const handleExcelFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setFileError(''); setResult(null); setPreviewData([]); setCsvText(''); setFileName(file.name);
+    try {
+      if (!file.name.toLowerCase().endsWith('.xlsx') || file.size > 5 * 1024 * 1024) throw new Error('Pilih file .xlsx berukuran maksimal 5 MB.');
+      const { readSheet } = await import('read-excel-file/browser');
+      const rows = await readSheet(file, 'Data Jemaat');
+      const headers = (rows[0] || []).map((value) => String(value || '').trim());
+      const columns = ['fullName','nickname','nik','familyCardNo','familyNo','familyRole','gender','birthPlace','birthDate','address','kelurahan','kecamatan','kabupaten','phone','email','maritalStatus','spouseName','rayon','categorial','membershipStatus','baptismStatus','baptismDate','confirmationStatus','confirmationDate','marriageChurchStatus','marriageDate','education','occupation','joinDate','status','notes'];
+      if (columns.some((name) => headers.filter((header) => header === name).length !== 1)) throw new Error('Kolom template tidak lengkap atau ganda. Gunakan template asli dan jangan ubah judul kolom.');
+      const parsed = rows.slice(1).map((row, index) => {
+        if (row.every((value) => value === null || value === '')) return null;
+        const item: Record<string, string | number> = { _row: index + 2 };
+        for (const name of columns) {
+          const value = row[headers.indexOf(name)] as unknown;
+          if ((name === 'nik' || name === 'familyCardNo' || name === 'phone') && typeof value === 'number') throw new Error(`Baris ${index + 2}: ${name} harus berupa teks; angka panjang dapat kehilangan digit. Isi sebagai teks di Excel.`);
+          if (value instanceof Date) item[name] = value.toISOString().slice(0, 10);
+          else item[name] = value == null ? '' : String(value).trim();
+        }
+        return item as unknown as Partial<Member>;
+      }).filter((row): row is Partial<Member> => row !== null);
+      if (!parsed.length) throw new Error('Belum ada data pada sheet Data Jemaat.');
+      if (parsed.length > 500) throw new Error('Maksimal 500 baris per impor.');
+      setPreviewData(parsed);
+    } catch (error: any) {
+      setFileError(error?.message || 'File Excel tidak dapat dibaca.');
+    }
+  };
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setFileName(''); setFileError(''); setResult(null);
     setCsvText(e.target.value);
     parseCSV(e.target.value);
   };
@@ -76,7 +110,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         errors: res.errors || [],
       });
     } catch (err: any) {
-      setResult({ imported: 0, failed: previewData.length, errors: [err.message] });
+      setResult({ imported: 0, failed: previewData.length, errors: [`${err.message}. Jika koneksi terputus, periksa daftar jemaat sebelum mencoba ulang agar tidak terjadi data ganda.`] });
     } finally {
       setImporting(false);
     }
@@ -98,6 +132,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4">
+          <div className="p-4 rounded-xl border border-cyan-500/40 bg-slate-900 space-y-3">
+            <a href="/Template_Impor_Data_Jemaat.xlsx" download className="inline-block px-4 py-2 rounded-lg bg-cyan-600 text-white font-bold">Unduh Template Excel (.xlsx)</a>
+            <p>Isi sheet <b>Data Jemaat</b>, simpan sebagai .xlsx, lalu pilih file di bawah. Lihat sheet Petunjuk untuk nama kolom dan pilihan yang valid. Foto diunggah lewat profil jemaat setelah impor.</p>
+            <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleExcelFile} aria-label="Pilih file Excel data jemaat" className="block w-full text-xs" />
+            {fileName && <p>File: {fileName}</p>}
+            {fileError && <p role="alert" className="text-rose-300">{fileError}</p>}
+          </div>
           <div className="space-y-1 text-slate-300">
             <p>
               Tempelkan data CSV berformat: <code className="text-amber-400 font-mono text-[11px]">fullName,gender,birthDate,birthPlace,address,rayonId,categorialGroupId,phone</code>
@@ -135,7 +176,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                         <td className="p-2 font-semibold text-white">{d.fullName}</td>
                         <td className="p-2">{d.gender}</td>
                         <td className="p-2 font-mono">{d.birthDate}</td>
-                        <td className="p-2">{rayons.find((r) => r.id === d.rayonId)?.name || d.rayonId}</td>
+                        <td className="p-2">{rayons.find((r) => r.id === d.rayonId)?.name || d.rayonId || (d as any).rayon || '-'}</td>
                         <td className="p-2 font-mono">{d.phone || '-'}</td>
                       </tr>
                     ))}
@@ -181,7 +222,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={importing || previewData.length === 0}
+            disabled={importing || previewData.length === 0 || !!result}
             onClick={handleStartImport}
             className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition-colors cursor-pointer disabled:opacity-50"
           >

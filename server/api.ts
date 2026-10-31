@@ -1780,8 +1780,8 @@ apiRouter.post('/import/members', (req, res) => {
   const db = getDb();
   const { members } = req.body;
 
-  if (!Array.isArray(members) || members.length === 0) {
-    return res.status(400).json({ success: false, message: 'Tidak ada data jemaat yang diimpor' });
+  if (!Array.isArray(members) || members.length === 0 || members.length > 500) {
+    return res.status(400).json({ success: false, message: 'Isi 1–500 data jemaat per impor.' });
   }
 
   let successCount = 0;
@@ -1809,19 +1809,47 @@ apiRouter.post('/import/members', (req, res) => {
   for (let i = 0; i < members.length; i++) {
     const item = members[i];
     try {
+      if (!item || typeof item !== 'object') throw new Error('Data baris tidak valid.');
+      const lookup = (table: 'rayons' | 'categorial_groups', value: string) => {
+        const rows = db.prepare(`SELECT id FROM ${table} WHERE lower(id) = lower(?) OR lower(code) = lower(?) OR lower(name) = lower(?)`).all(value, value, value) as any[];
+        if (rows.length !== 1) throw new Error(`Pilihan ${table === 'rayons' ? 'rayon' : 'kategorial'} "${value}" tidak ditemukan atau tidak unik.`);
+        return rows[0].id as string;
+      };
+      const rayonValue = String(item.rayon || item.rayonId || '').trim();
+      if (rayonValue) item.rayonId = lookup('rayons', rayonValue);
+      const categoryValue = String(item.categorial || item.categorialGroupId || '').trim();
+      if (categoryValue) item.categorialGroupId = lookup('categorial_groups', categoryValue);
+      if (item.familyNo) {
+        const family = db.prepare('SELECT id FROM families WHERE lower(family_no) = lower(?)').get(String(item.familyNo).trim()) as any;
+        if (!family) throw new Error(`Nomor KK aplikasi "${item.familyNo}" tidak ditemukan. Buat KK dahulu atau kosongkan kolom familyNo.`);
+        item.familyId = family.id;
+      } else if (item.familyId && !db.prepare('SELECT id FROM families WHERE id = ?').get(item.familyId)) throw new Error('Keluarga tidak ditemukan.');
+      for (const [key, choices] of Object.entries({
+        familyRole: ['Kepala Keluarga','Istri','Anak','Orang Tua','Famili Lain'],
+        maritalStatus: ['Belum Menikah','Menikah','Duda','Janda'], membershipStatus: ['Tetap','Tamu','Titipan'],
+        baptismStatus: ['Sudah','Belum'], confirmationStatus: ['Sudah','Belum'], marriageChurchStatus: ['Sudah','Belum'],
+        status: ['Aktif','Pindah','Meninggal'],
+      })) if (item[key] && !choices.includes(item[key])) throw new Error(`Nilai ${key} tidak valid: ${item[key]}`);
+      for (const key of ['birthDate','baptismDate','confirmationDate','marriageDate','joinDate']) {
+        const value = item[key];
+        if (value && (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value)) throw new Error(`${key} harus tanggal valid YYYY-MM-DD.`);
+      }
+      for (const key of ['nik', 'familyCardNo', 'phone']) {
+        if (item[key] != null && typeof item[key] !== 'string') throw new Error(`${key} harus berupa teks agar digit tidak hilang.`);
+      }
+      if (item.nik && db.prepare("SELECT id FROM members WHERE nik = ? AND nik != ''").get(item.nik)) throw new Error(`NIK ${item.nik} sudah terdaftar; baris tidak diimpor ulang.`);
       const v = validateMemberInput(item);
       if (!v.valid) {
-        errors.push(`Baris ${i + 1} (${item.fullName || 'Tanpa Nama'}): ${v.errors.join(', ')}`);
+        errors.push(`Baris ${item._row || i + 1} (${item.fullName || 'Tanpa Nama'}): ${v.errors.join(', ')}`);
         continue;
       }
 
       const id = 'm-imp-' + Date.now() + '-' + i;
-      const count = (db.prepare('SELECT count(*) as count FROM members').get() as { count: number }).count;
-      const memberNo = item.memberNo || generateMemberNo(count + 1);
+      const memberNo = getSafeNextMemberNo(db);
 
       insertMember.run(
         id, memberNo, item.fullName, item.nickname || '', item.nik || '', item.familyCardNo || '',
-        item.familyId || '', item.familyRole || 'Anggota', item.gender, item.birthPlace || '',
+        item.familyId || '', item.familyRole || 'Anak', item.gender, item.birthPlace || '',
         item.birthDate, item.address || '', item.kelurahan || '',
         item.kecamatan || '', item.kabupaten || '', item.phone || '', item.email || '',
         item.maritalStatus || 'Belum Menikah', item.spouseName || '', item.rayonId,
@@ -1829,12 +1857,12 @@ apiRouter.post('/import/members', (req, res) => {
         item.baptismStatus || 'Belum', item.baptismDate || '', item.confirmationStatus || 'Belum',
         item.confirmationDate || '', item.marriageChurchStatus || 'Belum', item.marriageDate || '',
         item.education || '', item.occupation || '', item.joinDate || now, item.status || 'Aktif',
-        item.notes || 'Diimpor via Excel/CSV', now, now
+        item.notes || '', now, now
       );
 
       successCount++;
     } catch (err: any) {
-      errors.push(`Baris ${i + 1} gagal: ${err.message}`);
+      errors.push(`Baris ${item?._row || i + 1} gagal: ${err.message}`);
     }
   }
 
