@@ -889,7 +889,11 @@ export default function App() {
   // Import handler
   const handleImportMembers = async (items: Partial<Member>[]) => {
     const res = await api.importMembersApi(items);
-    await loadAllData();
+    try {
+      await loadAllData();
+    } catch (error) {
+      console.error('Impor berhasil, tetapi pembaruan tampilan gagal:', error);
+    }
     return res;
   };
 

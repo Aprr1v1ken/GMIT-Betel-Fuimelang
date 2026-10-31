@@ -451,7 +451,9 @@ export async function importMembersApi(members: Partial<Member>[]) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ members }),
   });
-  return res.json();
+  const body = await res.json();
+  if (!res.ok || !body.success) throw new Error(body.message || 'Impor gagal.');
+  return body;
 }
 
 // AI Pastoral & Gerejawi Services
